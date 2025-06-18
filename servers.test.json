@@ -1,0 +1,14 @@
+[
+  {
+    "name": "mock-server-1",
+    "url": "http://localhost:9999/mcp",
+    "description": "Mock server for testing - will fail to connect",
+    "enabled": false
+  },
+  {
+    "name": "mock-server-2",
+    "url": "http://localhost:9998/mcp",
+    "description": "Another mock server for testing",
+    "enabled": false
+  }
+]

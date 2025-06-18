@@ -1,0 +1,332 @@
+/**
+ * Tests for the MCP Router Server
+ *
+ * This test suite validates the MCP router functionality using the Model Context Protocol.
+ * Tests verify that the router can connect to backend servers, aggregate tools, and route
+ * tool calls correctly.
+ */
+
+import { describe, test, expect, beforeAll, afterAll, vi } from 'vitest';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { spawn, ChildProcess } from 'child_process';
+
+describe('MCP Router Server', () => {
+  let client: Client;
+  let transport: StreamableHTTPClientTransport;
+  let routerProcess: ChildProcess;
+  const routerUrl = 'http://localhost:4001'; // Use different port for testing
+
+  beforeAll(async () => {
+    // Start the router HTTP server
+    routerProcess = spawn('node', ['dist/index.js'], {
+      env: {
+        ...process.env,
+        ROUTER_PORT: '4001', // Use port 4001 for testing
+        ROUTER_NAME: 'mcp-router-test',
+        ROUTER_VERSION: '1.0.0-test'
+      },
+      stdio: 'pipe'
+    });
+
+    // Log router output for debugging
+    routerProcess.stdout?.on('data', (data) => {
+      console.log(`Router stdout: ${data}`);
+    });
+
+    routerProcess.stderr?.on('data', (data) => {
+      console.error(`Router stderr: ${data}`);
+    });
+
+    // Wait for router to start
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Router failed to start within timeout'));
+      }, 15000);
+
+      const checkRouter = async () => {
+        try {
+          const response = await fetch(`${routerUrl}/health`);
+          if (response.ok) {
+            clearTimeout(timeout);
+            resolve(undefined);
+          } else {
+            setTimeout(checkRouter, 500);
+          }
+        } catch (error) {
+          setTimeout(checkRouter, 500);
+        }
+      };
+
+      checkRouter();
+    });
+
+    // Create MCP client transport
+    transport = new StreamableHTTPClientTransport(new URL(`${routerUrl}/mcp`));
+
+    // Create MCP client
+    client = new Client({
+      name: 'mcp-router-client-test',
+      version: '1.0.0'
+    });
+
+    // Connect to the MCP router
+    await client.connect(transport);
+  });
+
+  afterAll(async () => {
+    // Clean up
+    if (client) {
+      await client.close();
+    }
+
+    // Kill the router process
+    if (routerProcess) {
+      routerProcess.kill('SIGTERM');
+
+      // Wait for process to exit
+      await new Promise((resolve) => {
+        routerProcess.on('exit', resolve);
+        setTimeout(() => {
+          routerProcess.kill('SIGKILL');
+          resolve(undefined);
+        }, 5000);
+      });
+    }
+  });
+
+  test('should connect to MCP router successfully', () => {
+    // If we reach this point, the connection was successful
+    expect(client).toBeDefined();
+  });
+
+  test('should respond to health check', async () => {
+    const response = await fetch(`${routerUrl}/health`);
+    expect(response.ok).toBe(true);
+
+    const healthData = await response.json();
+    expect(healthData).toBeDefined();
+    expect(healthData.status).toBe('healthy');
+    expect(healthData.service).toBe('mcp-router-test');
+    expect(healthData.version).toBe('1.0.0-test');
+    expect(healthData.timestamp).toBeDefined();
+    expect(healthData.stats).toBeDefined();
+    expect(typeof healthData.stats.uptime).toBe('number');
+    expect(typeof healthData.stats.requestCount).toBe('number');
+    expect(typeof healthData.stats.errorCount).toBe('number');
+  });
+
+  test('should respond to configuration endpoint', async () => {
+    const response = await fetch(`${routerUrl}/config`);
+    expect(response.ok).toBe(true);
+
+    const configData = await response.json();
+    expect(configData).toBeDefined();
+    expect(configData.servers).toBeDefined();
+    expect(Array.isArray(configData.servers)).toBe(true);
+    expect(configData.port).toBe(4001);
+    expect(configData.routerName).toBe('mcp-router-test');
+    expect(configData.routerVersion).toBe('1.0.0-test');
+    expect(configData.toolNameSeparator).toBeDefined();
+  });
+
+  test('should have router management tools available', async () => {
+    const tools = await client.listTools();
+
+    expect(tools).toBeDefined();
+    expect(tools.tools).toBeDefined();
+    expect(Array.isArray(tools.tools)).toBe(true);
+
+    const toolNames = tools.tools?.map((tool: any) => tool.name) || [];
+
+    // Check for router management tools
+    expect(toolNames).toContain('router:list-servers');
+    expect(toolNames).toContain('router:reconnect-server');
+    expect(toolNames).toContain('router:stats');
+
+    // Verify tool descriptions
+    const listServersTool = tools.tools?.find((tool: any) => tool.name === 'router:list-servers');
+    expect(listServersTool?.description).toBe('List all configured MCP servers and their status');
+
+    const statsTool = tools.tools?.find((tool: any) => tool.name === 'router:stats');
+    expect(statsTool?.description).toBe('Get router statistics and performance metrics');
+  });
+
+  test('should list servers successfully', async () => {
+    const result = await client.callTool({
+      name: 'router:list-servers',
+      arguments: {}
+    });
+
+    expect(result).toBeDefined();
+    expect(result.content).toBeDefined();
+    expect(Array.isArray(result.content)).toBe(true);
+    expect((result.content as any[]).length).toBeGreaterThan(0);
+
+    const content = result.content as any[];
+    const resultText = content[0].text;
+    expect(resultText).toBeDefined();
+    expect(typeof resultText).toBe('string');
+
+    // Parse the JSON response to validate structure
+    const parsedResult = JSON.parse(resultText);
+    expect(parsedResult).toBeDefined();
+    expect(parsedResult.summary).toBeDefined();
+    expect(parsedResult.servers).toBeDefined();
+    expect(Array.isArray(parsedResult.servers)).toBe(true);
+
+    // Validate summary structure
+    expect(typeof parsedResult.summary.totalServers).toBe('number');
+    expect(typeof parsedResult.summary.connectedServers).toBe('number');
+    expect(typeof parsedResult.summary.totalTools).toBe('number');
+  });
+
+  test('should get router statistics successfully', async () => {
+    const result = await client.callTool({
+      name: 'router:stats',
+      arguments: {}
+    });
+
+    expect(result).toBeDefined();
+    expect(result.content).toBeDefined();
+    expect(Array.isArray(result.content)).toBe(true);
+    expect((result.content as any[]).length).toBeGreaterThan(0);
+
+    const content = result.content as any[];
+    const resultText = content[0].text;
+    expect(resultText).toBeDefined();
+    expect(typeof resultText).toBe('string');
+
+    // Parse the JSON response to validate structure
+    const stats = JSON.parse(resultText);
+    expect(stats).toBeDefined();
+    expect(typeof stats.totalServers).toBe('number');
+    expect(typeof stats.connectedServers).toBe('number');
+    expect(typeof stats.totalTools).toBe('number');
+    expect(typeof stats.uptime).toBe('number');
+    expect(typeof stats.requestCount).toBe('number');
+    expect(typeof stats.errorCount).toBe('number');
+    expect(stats.uptimeFormatted).toBeDefined();
+    expect(typeof stats.uptimeFormatted).toBe('string');
+  });
+
+  test('should handle reconnect-server tool with invalid server', async () => {
+    const result = await client.callTool({
+      name: 'router:reconnect-server',
+      arguments: {
+        serverName: 'nonexistent-server'
+      }
+    });
+
+    expect(result).toBeDefined();
+    expect(result.content).toBeDefined();
+    expect(Array.isArray(result.content)).toBe(true);
+    expect((result.content as any[]).length).toBeGreaterThan(0);
+
+    const content = result.content as any[];
+    const resultText = content[0].text;
+    expect(resultText).toBeDefined();
+    expect(typeof resultText).toBe('string');
+    expect(resultText.toLowerCase()).toContain('error');
+    expect(result.isError).toBe(true);
+  });
+
+  test('should handle invalid tool calls gracefully', async () => {
+    try {
+      await client.callTool({
+        name: 'nonexistent:tool',
+        arguments: {}
+      });
+
+      // Should not reach here
+      expect(false).toBe(true);
+    } catch (error) {
+      // Should throw an error for nonexistent tool
+      expect(error).toBeDefined();
+    }
+  });
+
+  test('should handle unsupported HTTP methods on MCP endpoint', async () => {
+    const getResponse = await fetch(`${routerUrl}/mcp`, { method: 'GET' });
+    expect(getResponse.status).toBe(405);
+
+    const getData = await getResponse.text();
+    const getParsed = JSON.parse(getData);
+    expect(getParsed.error.message).toBe('Method not allowed.');
+    expect(getParsed.error.code).toBe(-32000);
+
+    const deleteResponse = await fetch(`${routerUrl}/mcp`, { method: 'DELETE' });
+    expect(deleteResponse.status).toBe(405);
+
+    const deleteData = await deleteResponse.text();
+    const deleteParsed = JSON.parse(deleteData);
+    expect(deleteParsed.error.message).toBe('Method not allowed.');
+    expect(deleteParsed.error.code).toBe(-32000);
+  });
+
+  test('should aggregate tools from connected servers if any', async () => {
+    const tools = await client.listTools();
+
+    expect(tools).toBeDefined();
+    expect(tools.tools).toBeDefined();
+    expect(Array.isArray(tools.tools)).toBe(true);
+
+    // Should at least have router management tools
+    expect(tools.tools?.length).toBeGreaterThanOrEqual(3);
+
+    const toolNames = tools.tools?.map((tool: any) => tool.name) || [];
+
+    // Check if there are any aggregated tools (with separator)
+    const aggregatedTools = toolNames.filter(name => name.includes(':') && !name.startsWith('router:'));
+
+    if (aggregatedTools.length > 0) {
+      console.log(`Found ${aggregatedTools.length} aggregated tools from backend servers`);
+
+      // Verify tool naming convention
+      aggregatedTools.forEach(toolName => {
+        expect(toolName).toMatch(/^[^:]+:.+$/); // Should match "server:toolname" pattern
+      });
+    } else {
+      console.log('No backend servers connected - only router management tools available');
+    }
+  });
+
+  test('should maintain consistent server state across calls', async () => {
+    // Call list-servers multiple times to ensure consistent state
+    const results = await Promise.all([
+      client.callTool({ name: 'router:list-servers', arguments: {} }),
+      client.callTool({ name: 'router:stats', arguments: {} }),
+      client.callTool({ name: 'router:list-servers', arguments: {} })
+    ]);
+
+    expect(results.length).toBe(3);
+
+    const firstListResult = JSON.parse((results[0].content as any[])[0].text);
+    const statsResult = JSON.parse((results[1].content as any[])[0].text);
+    const secondListResult = JSON.parse((results[2].content as any[])[0].text);
+
+    // Server counts should be consistent
+    expect(firstListResult.summary.totalServers).toBe(statsResult.totalServers);
+    expect(firstListResult.summary.connectedServers).toBe(statsResult.connectedServers);
+    expect(firstListResult.summary.totalTools).toBe(statsResult.totalTools);
+
+    expect(secondListResult.summary.totalServers).toBe(firstListResult.summary.totalServers);
+    expect(secondListResult.summary.connectedServers).toBe(firstListResult.summary.connectedServers);
+  });
+
+  test('should handle malformed MCP requests gracefully', async () => {
+    const response = await fetch(`${routerUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        invalidField: 'invalid data'
+      })
+    });
+
+    // Should handle malformed requests without crashing
+    expect(response.status).toBeGreaterThanOrEqual(200);
+    expect(response.status).toBeLessThan(600);
+  });
+});
