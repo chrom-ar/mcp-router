@@ -29,12 +29,13 @@ RUN addgroup -g 1001 -S nodejs && \
 RUN chown -R mcp-router:nodejs /app
 USER mcp-router
 
-EXPOSE 4000
+ARG PORT=4000
+EXPOSE $PORT
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:4000/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:$PORT/health || exit 1
 
 ENV NODE_ENV=production
-ENV ROUTER_PORT=4000
+ENV ROUTER_PORT=$PORT
 
 CMD ["node", "dist/index.js"]
