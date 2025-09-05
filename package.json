@@ -9,7 +9,9 @@
     "start": "npm run build && node dist/index.js",
     "dev": "tsc && node dist/index.js",
     "watch": "tsc --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint 'src/**/*.ts'",
+    "lint:fix": "eslint 'src/**/*.ts' --fix"
   },
   "keywords": [
     "mcp",
@@ -21,16 +23,19 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.12.3",
-    "dotenv": "16.5.0",
+    "@modelcontextprotocol/sdk": "1.17.5",
+    "dotenv": "17.2.2",
     "express": "5.1.0",
     "json-schema-to-zod": "2.6.1",
-    "zod": "3.25.64"
+    "zod": "3.25.67"
   },
   "devDependencies": {
     "@types/express": "5.0.3",
-    "@types/node": "24.0.1",
-    "typescript": "5.8.3",
+    "@types/node": "24.3.1",
+    "@typescript-eslint/eslint-plugin": "^8.42.0",
+    "@typescript-eslint/parser": "^8.42.0",
+    "eslint": "^9.35.0",
+    "typescript": "5.9.2",
     "vitest": "2.1.9"
   },
   "engines": {

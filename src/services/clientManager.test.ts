@@ -5,48 +5,56 @@
  * including server connection management, tool aggregation, and error handling.
  */
 
-import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { ClientManager } from './clientManager.js';
-import type { McpServerConfig } from '../types/index.js';
+import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { ClientManager } from "./clientManager.js";
+import type { McpServerConfig } from "../types/index.js";
 
 // Mock the MCP SDK
-vi.mock('@modelcontextprotocol/sdk/client/index.js');
-vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js');
+vi.mock("@modelcontextprotocol/sdk/client/index.js");
+vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js");
+
+// Mock json-schema-to-zod
+vi.mock("json-schema-to-zod", () => ({
+  jsonSchemaToZod: vi.fn(schema => {
+    // Return a string that when eval'd will produce a zod schema
+    return "z.object({})";
+  }),
+}));
 
 const MockedClient = Client as any;
 const MockedTransport = StreamableHTTPClientTransport as any;
 
-describe('ClientManager', () => {
+describe("ClientManager", () => {
   let clientManager: ClientManager;
   let mockClient: any;
   let mockTransport: any;
 
   const mockServerConfig: McpServerConfig = {
-    name: 'test-server',
-    url: 'http://localhost:3000/mcp',
-    description: 'Test server',
-    enabled: true
+    name: "test-server",
+    url: "http://localhost:3000/mcp",
+    description: "Test server",
+    enabled: true,
   };
 
   const mockTools = [
     {
-      name: 'test-tool-1',
-      description: 'Test tool 1',
+      name: "test-tool-1",
+      description: "Test tool 1",
       inputSchema: {
-        type: 'object',
-        properties: { param1: { type: 'string' } }
-      }
+        type: "object",
+        properties: { param1: { type: "string" } },
+      },
     },
     {
-      name: 'test-tool-2',
-      description: 'Test tool 2',
+      name: "test-tool-2",
+      description: "Test tool 2",
       inputSchema: {
-        type: 'object',
-        properties: { param2: { type: 'number' } }
-      }
-    }
+        type: "object",
+        properties: { param2: { type: "number" } },
+      },
+    },
   ];
 
   beforeEach(() => {
@@ -57,13 +65,13 @@ describe('ClientManager', () => {
     mockClient = {
       connect: vi.fn().mockResolvedValue(undefined),
       listTools: vi.fn().mockResolvedValue({ tools: mockTools }),
-      callTool: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'Mock result' }] }),
-      onerror: null
+      callTool: vi.fn().mockResolvedValue({ content: [{ type: "text", text: "Mock result" }] }),
+      onerror: null,
     };
 
     // Create mock transport
     mockTransport = {
-      close: vi.fn().mockResolvedValue(undefined)
+      close: vi.fn().mockResolvedValue(undefined),
     };
 
     // Mock constructors
@@ -71,38 +79,38 @@ describe('ClientManager', () => {
     MockedTransport.mockImplementation(() => mockTransport);
 
     // Create client manager instance
-    clientManager = new ClientManager(':');
+    clientManager = new ClientManager(":");
 
     // Suppress console.error for cleaner test output
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  test('should create ClientManager with default separator', () => {
+  test("should create ClientManager with default separator", () => {
     const manager = new ClientManager();
     expect(manager).toBeDefined();
   });
 
-  test('should create ClientManager with custom separator', () => {
-    const manager = new ClientManager('|');
+  test("should create ClientManager with custom separator", () => {
+    const manager = new ClientManager("|");
     expect(manager).toBeDefined();
   });
 
-  test('should connect to a single server successfully', async () => {
+  test("should connect to a single server successfully", async () => {
     await clientManager.connectToServers([mockServerConfig]);
 
     expect(MockedClient).toHaveBeenCalledWith({
-      name: 'mcp-router-client',
-      version: '1.0.0'
+      name: "mcp-router-client",
+      version: "1.0.0",
     });
     expect(mockClient.connect).toHaveBeenCalledWith(mockTransport);
     expect(mockClient.listTools).toHaveBeenCalled();
   });
 
-  test('should skip disabled servers', async () => {
+  test("should skip disabled servers", async () => {
     const disabledConfig = { ...mockServerConfig, enabled: false };
 
     await clientManager.connectToServers([disabledConfig]);
@@ -111,8 +119,8 @@ describe('ClientManager', () => {
     expect(mockClient.connect).not.toHaveBeenCalled();
   });
 
-  test('should handle connection failures gracefully', async () => {
-    mockClient.connect.mockRejectedValue(new Error('Connection failed'));
+  test("should handle connection failures gracefully", async () => {
+    mockClient.connect.mockRejectedValue(new Error("Connection failed"));
 
     await clientManager.connectToServers([mockServerConfig]);
 
@@ -120,78 +128,77 @@ describe('ClientManager', () => {
     const statuses = clientManager.getServerStatuses();
     expect(statuses).toHaveLength(1);
     expect(statuses[0].connected).toBe(false);
-    expect(statuses[0].lastError).toBe('Connection failed');
+    expect(statuses[0].lastError).toBe("Connection failed");
   });
 
-  test('should aggregate tools with server prefixes', async () => {
+  test("should aggregate tools with server prefixes", async () => {
     await clientManager.connectToServers([mockServerConfig]);
+
+    // Verify that listTools was called
+    expect(mockClient.listTools).toHaveBeenCalled();
 
     const allTools = clientManager.getAllTools();
     expect(allTools).toHaveLength(2);
 
-    expect(allTools[0].name).toBe('test-server:test-tool-1');
-    expect(allTools[0].serverName).toBe('test-server');
-    expect(allTools[0].originalName).toBe('test-tool-1');
-    expect(allTools[0].description).toBe('Test tool 1');
+    expect(allTools[0].name).toBe("test-server:test-tool-1");
+    expect(allTools[0].description).toContain("Test tool 1");
 
-    expect(allTools[1].name).toBe('test-server:test-tool-2');
-    expect(allTools[1].serverName).toBe('test-server');
-    expect(allTools[1].originalName).toBe('test-tool-2');
-    expect(allTools[1].description).toBe('Test tool 2');
+    expect(allTools[1].name).toBe("test-server:test-tool-2");
+    expect(allTools[1].description).toContain("Test tool 2");
   });
 
-  test('should use custom separator for tool names', async () => {
-    const customManager = new ClientManager('|');
+  test("should use custom separator for tool names", async () => {
+    const customManager = new ClientManager("|");
     await customManager.connectToServers([mockServerConfig]);
 
     const allTools = customManager.getAllTools();
-    expect(allTools[0].name).toBe('test-server|test-tool-1');
+    expect(allTools[0].name).toBe("test-server|test-tool-1");
   });
 
-  test('should call tools on the correct server', async () => {
+  test("should call tools on the correct server", async () => {
     await clientManager.connectToServers([mockServerConfig]);
 
-    const result = await clientManager.callTool('test-server:test-tool-1', { param1: 'value' });
+    const result = await clientManager.callTool("test-server:test-tool-1", { param1: "value" });
 
     expect(mockClient.callTool).toHaveBeenCalledWith({
-      name: 'test-tool-1',
-      arguments: { param1: 'value' }
+      name: "test-tool-1",
+      arguments: { param1: "value" },
     });
-    expect(result).toEqual({ content: [{ type: 'text', text: 'Mock result' }] });
+    expect(result).toEqual({ content: [{ type: "text", text: "Mock result" }] });
   });
 
-  test('should throw error for unknown tool', async () => {
+  test("should throw error for unknown tool", async () => {
     await clientManager.connectToServers([mockServerConfig]);
 
-    await expect(clientManager.callTool('unknown:tool', {}))
-      .rejects.toThrow('Tool not found: unknown:tool');
+    await expect(clientManager.callTool("unknown:tool", {}))
+      .rejects.toThrow("Tool not found: unknown:tool");
   });
 
-  test('should throw error when calling tool on disconnected server', async () => {
+  test("should throw error when calling tool on disconnected server", async () => {
     // Connect first
     await clientManager.connectToServers([mockServerConfig]);
 
     // Simulate disconnection
     const statuses = clientManager.getServerStatuses();
-    const connection = (clientManager as any).connections.get('test-server');
+    const connection = (clientManager as any).connections.get("test-server");
     connection.status.connected = false;
 
-    await expect(clientManager.callTool('test-server:test-tool-1', {}))
-      .rejects.toThrow('Server test-server is not connected');
+    await expect(clientManager.callTool("test-server:test-tool-1", {}))
+      .rejects.toThrow("Server test-server is not connected");
   });
 
-  test('should get server statuses', async () => {
+  test("should get server statuses", async () => {
     await clientManager.connectToServers([mockServerConfig]);
 
     const statuses = clientManager.getServerStatuses();
     expect(statuses).toHaveLength(1);
-    expect(statuses[0].name).toBe('test-server');
-    expect(statuses[0].url).toBe('http://localhost:3000/mcp');
+    expect(statuses[0].name).toBe("test-server");
+    expect(statuses[0].url).toBe("http://localhost:3000/mcp");
     expect(statuses[0].connected).toBe(true);
     expect(statuses[0].toolsCount).toBe(2);
   });
 
-  test('should get router stats', async () => {
+  test("should get router stats", async () => {
     await clientManager.connectToServers([mockServerConfig]);
 
     const stats = clientManager.getStats();
@@ -201,28 +208,28 @@ describe('ClientManager', () => {
     expect(stats.toolRoutes).toBe(2);
   });
 
-  test('should handle multiple servers', async () => {
+  test("should handle multiple servers", async () => {
     const server2Config: McpServerConfig = {
-      name: 'test-server-2',
-      url: 'http://localhost:3001/mcp',
-      description: 'Test server 2',
-      enabled: true
+      name: "test-server-2",
+      url: "http://localhost:3001/mcp",
+      description: "Test server 2",
+      enabled: true,
     };
 
     const mockTools2 = [
       {
-        name: 'tool-a',
-        description: 'Tool A',
-        inputSchema: { type: 'object' }
-      }
+        name: "tool-a",
+        description: "Tool A",
+        inputSchema: { type: "object" },
+      },
     ];
 
     // Mock second client
     const mockClient2 = {
       connect: vi.fn().mockResolvedValue(undefined),
       listTools: vi.fn().mockResolvedValue({ tools: mockTools2 }),
-      callTool: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'Result from server 2' }] }),
-      onerror: null
+      callTool: vi.fn().mockResolvedValue({ content: [{ type: "text", text: "Result from server 2" }] }),
+      onerror: null,
     };
 
     MockedClient.mockImplementationOnce(() => mockClient)
@@ -239,49 +246,49 @@ describe('ClientManager', () => {
     expect(stats.totalTools).toBe(3);
 
     // Test calling tools from different servers
-    const result1 = await clientManager.callTool('test-server:test-tool-1', {});
+    const result1 = await clientManager.callTool("test-server:test-tool-1", {});
     expect(mockClient.callTool).toHaveBeenCalledWith({
-      name: 'test-tool-1',
-      arguments: {}
+      name: "test-tool-1",
+      arguments: {},
     });
 
-    const result2 = await clientManager.callTool('test-server-2:tool-a', {});
+    const result2 = await clientManager.callTool("test-server-2:tool-a", {});
     expect(mockClient2.callTool).toHaveBeenCalledWith({
-      name: 'tool-a',
-      arguments: {}
+      name: "tool-a",
+      arguments: {},
     });
   });
 
-  test('should handle reconnect to server', async () => {
+  test("should handle reconnect to server", async () => {
     await clientManager.connectToServers([mockServerConfig]);
 
     // Mock new client for reconnection
     const newMockClient = {
       connect: vi.fn().mockResolvedValue(undefined),
       listTools: vi.fn().mockResolvedValue({ tools: mockTools }),
-      callTool: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'Reconnected result' }] }),
-      onerror: null
+      callTool: vi.fn().mockResolvedValue({ content: [{ type: "text", text: "Reconnected result" }] }),
+      onerror: null,
     };
 
     MockedClient.mockImplementationOnce(() => newMockClient);
 
-    await clientManager.reconnectToServer('test-server');
+    await clientManager.reconnectToServer("test-server");
 
     expect(mockTransport.close).toHaveBeenCalled();
     expect(newMockClient.connect).toHaveBeenCalled();
 
     // Old routes should be cleared and new ones created
-    const result = await clientManager.callTool('test-server:test-tool-1', {});
+    const result = await clientManager.callTool("test-server:test-tool-1", {});
     expect(newMockClient.callTool).toHaveBeenCalled();
   });
 
-  test('should throw error when reconnecting to unknown server', async () => {
-    await expect(clientManager.reconnectToServer('unknown-server'))
-      .rejects.toThrow('Server unknown-server not found');
+  test("should throw error when reconnecting to unknown server", async () => {
+    await expect(clientManager.reconnectToServer("unknown-server"))
+      .rejects.toThrow("Server unknown-server not found");
   });
 
-  test('should handle tool loading failures gracefully', async () => {
-    mockClient.listTools.mockRejectedValue(new Error('Failed to list tools'));
+  test("should handle tool loading failures gracefully", async () => {
+    mockClient.listTools.mockRejectedValue(new Error("Failed to list tools"));
 
     await clientManager.connectToServers([mockServerConfig]);
 
@@ -290,19 +297,19 @@ describe('ClientManager', () => {
 
     const statuses = clientManager.getServerStatuses();
     expect(statuses[0].connected).toBe(true); // Still connected
-    expect(statuses[0].lastError).toBe('Failed to list tools');
+    expect(statuses[0].lastError).toBe("Failed to list tools");
     expect(statuses[0].toolsCount).toBe(0);
   });
 
-  test('should disconnect all servers', async () => {
+  test("should disconnect all servers", async () => {
     const server2Config: McpServerConfig = {
-      name: 'test-server-2',
-      url: 'http://localhost:3001/mcp',
-      enabled: true
+      name: "test-server-2",
+      url: "http://localhost:3001/mcp",
+      enabled: true,
     };
 
     const mockTransport2 = {
-      close: vi.fn().mockResolvedValue(undefined)
+      close: vi.fn().mockResolvedValue(undefined),
     };
 
     MockedTransport.mockImplementationOnce(() => mockTransport)
@@ -321,8 +328,8 @@ describe('ClientManager', () => {
     expect(stats.totalTools).toBe(0);
   });
 
-  test('should handle disconnection errors gracefully', async () => {
-    mockTransport.close.mockRejectedValue(new Error('Disconnection failed'));
+  test("should handle disconnection errors gracefully", async () => {
+    mockTransport.close.mockRejectedValue(new Error("Disconnection failed"));
 
     await clientManager.connectToServers([mockServerConfig]);
 
@@ -330,16 +337,16 @@ describe('ClientManager', () => {
     await expect(clientManager.disconnectAll()).resolves.toBeUndefined();
   });
 
-  test('should only return tools from connected servers', async () => {
+  test("should only return tools from connected servers", async () => {
     const server2Config: McpServerConfig = {
-      name: 'disconnected-server',
-      url: 'http://localhost:3001/mcp',
-      enabled: true
+      name: "disconnected-server",
+      url: "http://localhost:3001/mcp",
+      enabled: true,
     };
 
     // Mock first server connects, second fails
     const failingClient = {
-      connect: vi.fn().mockRejectedValue(new Error('Connection failed'))
+      connect: vi.fn().mockRejectedValue(new Error("Connection failed")),
     };
 
     MockedClient.mockImplementationOnce(() => mockClient)

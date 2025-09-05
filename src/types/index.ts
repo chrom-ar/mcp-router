@@ -1,11 +1,11 @@
-import { ZodRawShape } from 'zod';
+import { ZodRawShape } from "zod";
 
 // Basic tool interface (matching MCP SDK Tool type)
 export interface Tool {
   name: string;
   description?: string;
   inputSchema: {
-    type: 'object';
+    type: "object";
     properties?: Record<string, unknown>;
     required?: string[];
   };

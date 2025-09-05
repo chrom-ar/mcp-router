@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
-import express, { Request, Response } from 'express';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { z } from 'zod';
-import dotenv from 'dotenv';
+import express, { Request, Response } from "express";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { z } from "zod";
+import dotenv from "dotenv";
 
-import { ClientManager } from './services/clientManager.js';
-import type { RouterConfig, McpServerConfig, RouterStats } from './types/index.js';
+import { ClientManager } from "./services/clientManager.js";
+import type { RouterConfig, McpServerConfig, RouterStats } from "./types/index.js";
 
 // Load environment variables
 dotenv.config();
@@ -15,10 +15,10 @@ dotenv.config();
 // Build configuration with dynamic server registration
 const config: RouterConfig = {
   servers: [], // Start with empty servers list - they will register themselves
-  port: parseInt(process.env.ROUTER_PORT || '4000'),
-  routerName: process.env.ROUTER_NAME || 'mcp-router',
-  routerVersion: process.env.ROUTER_VERSION || '1.0.0',
-  toolNameSeparator: process.env.TOOL_NAME_SEPARATOR || ':'
+  port: parseInt(process.env.ROUTER_PORT || "4000"),
+  routerName: process.env.ROUTER_NAME || "mcp-router",
+  routerVersion: process.env.ROUTER_VERSION || "1.0.0",
+  toolNameSeparator: process.env.TOOL_NAME_SEPARATOR || ":",
 };
 
 // Create Express app
@@ -27,8 +27,8 @@ app.use(express.json());
 
 // Create MCP server instance
 const server = new McpServer({
-  name: config.routerName || 'mcp-router',
-  version: config.routerVersion || '1.0.0',
+  name: config.routerName || "mcp-router",
+  version: config.routerVersion || "1.0.0",
 });
 
 // Initialize client manager
@@ -41,15 +41,15 @@ const stats: RouterStats = {
   totalTools: 0,
   uptime: Date.now(),
   requestCount: 0,
-  errorCount: 0
+  errorCount: 0,
 };
 
 // We'll register tools dynamically after connecting to servers
 
 // Add router management tools
 server.tool(
-  'router:list-servers',
-  'List all configured MCP servers and their status',
+  "router:list-servers",
+  "List all configured MCP servers and their status",
   {},
   async () => {
     try {
@@ -59,35 +59,35 @@ server.tool(
       return {
         content: [
           {
-            type: 'text',
+            type: "text",
             text: JSON.stringify({
               summary: {
                 totalServers: routerStats.totalServers,
                 connectedServers: routerStats.connectedServers,
-                totalTools: routerStats.totalTools
+                totalTools: routerStats.totalTools,
               },
-              servers: serverStatuses
-            }, null, 2)
-          }
-        ]
+              servers: serverStatuses,
+            }, null, 2),
+          },
+        ],
       };
-    } catch (error) {
+    } catch (error: unknown) {
       return {
         content: [
           {
-            type: 'text',
-            text: `Error listing servers: ${error instanceof Error ? error.message : 'Unknown error'}`
-          }
+            type: "text",
+            text: `Error listing servers: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
         ],
-        isError: true
+        isError: true,
       };
     }
-  }
+  },
 );
 
 server.tool(
-  'router:list-tools',
-  'List all available tools from connected MCP servers',
+  "router:list-tools",
+  "List all available tools from connected MCP servers",
   {},
   async () => {
     try {
@@ -97,39 +97,39 @@ server.tool(
       return {
         content: [
           {
-            type: 'text',
+            type: "text",
             text: JSON.stringify({
               summary: {
                 totalServers: routerStats.totalServers,
                 connectedServers: routerStats.connectedServers,
-                totalTools: tools.length
+                totalTools: tools.length,
               },
               tools: tools.map(tool => ({
                 name: tool.name,
-                description: tool.description || 'No description available',
-                schema: tool.schema,
-              }))
-            }, null, 2)
-          }
-        ]
+                description: tool.description || "No description available",
+                schema: tool.schema.shape,
+              })),
+            }, null, 2),
+          },
+        ],
       };
-    } catch (error) {
+    } catch (error: unknown) {
       return {
         content: [
           {
-            type: 'text',
-            text: `Error listing tools: ${error instanceof Error ? error.message : 'Unknown error'}`
-          }
+            type: "text",
+            text: `Error listing tools: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
         ],
-        isError: true
+        isError: true,
       };
     }
-  }
+  },
 );
 
 server.tool(
-  'router:stats',
-  'Get router statistics and performance metrics',
+  "router:stats",
+  "Get router statistics and performance metrics",
   {},
   async () => {
     try {
@@ -138,43 +138,43 @@ server.tool(
         ...stats,
         ...routerStats,
         uptime: Date.now() - stats.uptime,
-        uptimeFormatted: formatUptime(Date.now() - stats.uptime)
+        uptimeFormatted: formatUptime(Date.now() - stats.uptime),
       };
 
       return {
         content: [
           {
-            type: 'text',
-            text: JSON.stringify(currentStats, null, 2)
-          }
-        ]
+            type: "text",
+            text: JSON.stringify(currentStats, null, 2),
+          },
+        ],
       };
     } catch (error) {
       return {
         content: [
           {
-            type: 'text',
-            text: `Error getting stats: ${error instanceof Error ? error.message : 'Unknown error'}`
-          }
+            type: "text",
+            text: `Error getting stats: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
         ],
-        isError: true
+        isError: true,
       };
     }
-  }
+  },
 );
 
 // Add server registration tool
 server.tool(
-  'router:register-server',
-  'Register a new MCP server with the router',
+  "router:register-server",
+  "Register a new MCP server with the router",
   {
-    id: z.string().describe('Unique identifier for the server'),
-    name: z.string().describe('Unique name for the server'),
-    url: z.string().describe('URL of the MCP server endpoint'),
-    description: z.string().optional().describe('Optional description of the server'),
-    enabled: z.boolean().optional().default(true).describe('Whether the server should be enabled'),
+    id: z.string().describe("Unique identifier for the server"),
+    name: z.string().describe("Unique name for the server"),
+    url: z.string().describe("URL of the MCP server endpoint"),
+    description: z.string().optional().describe("Optional description of the server"),
+    enabled: z.boolean().optional().default(true).describe("Whether the server should be enabled"),
   },
-  async (args) => {
+  async args => {
     try {
       const serverConfig: McpServerConfig = {
         id: args.id,
@@ -216,7 +216,7 @@ server.tool(
       return {
         content: [
           {
-            type: 'text',
+            type: "text",
             text: JSON.stringify({
               success: true,
               message: `Successfully registered server: ${args.name}`,
@@ -224,34 +224,34 @@ server.tool(
               stats: {
                 totalServers: stats.totalServers,
                 connectedServers: stats.connectedServers,
-                totalTools: stats.totalTools
-              }
-            }, null, 2)
-          }
-        ]
+                totalTools: stats.totalTools,
+              },
+            }, null, 2),
+          },
+        ],
       };
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`Error registering server ${args.name}:`, error);
       return {
         content: [
           {
-            type: 'text',
-            text: `Error registering server ${args.name}: ${error instanceof Error ? error.message : 'Unknown error'}`
-          }
+            type: "text",
+            text: `Error registering server ${args.name}: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
         ],
-        isError: true
+        isError: true,
       };
     }
-  }
+  },
 );
 
 server.tool(
-  'router:unregister-server',
-  'Unregister an MCP server from the router',
+  "router:unregister-server",
+  "Unregister an MCP server from the router",
   {
-    serverName: z.string().describe('Name of the server to unregister')
+    serverName: z.string().describe("Name of the server to unregister"),
   },
-  async (args) => {
+  async args => {
     try {
       // Find and remove server from config
       const serverIndex = config.servers.findIndex(s => s.name === args.serverName);
@@ -260,11 +260,11 @@ server.tool(
         return {
           content: [
             {
-              type: 'text',
-              text: `Server not found: ${args.serverName}`
-            }
+              type: "text",
+              text: `Server not found: ${args.serverName}`,
+            },
           ],
-          isError: true
+          isError: true,
         };
       }
 
@@ -285,32 +285,79 @@ server.tool(
       return {
         content: [
           {
-            type: 'text',
+            type: "text",
             text: JSON.stringify({
               success: true,
               message: `Successfully unregistered server: ${args.serverName}`,
               stats: {
                 totalServers: stats.totalServers,
                 connectedServers: stats.connectedServers,
-                totalTools: stats.totalTools
-              }
-            }, null, 2)
-          }
-        ]
+                totalTools: stats.totalTools,
+              },
+            }, null, 2),
+          },
+        ],
       };
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`Error unregistering server ${args.serverName}:`, error);
       return {
         content: [
           {
-            type: 'text',
-            text: `Error unregistering server ${args.serverName}: ${error instanceof Error ? error.message : 'Unknown error'}`
-          }
+            type: "text",
+            text: `Error unregistering server ${args.serverName}: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
         ],
-        isError: true
+        isError: true,
       };
     }
-  }
+  },
+);
+
+server.tool(
+  "router:reconnect-server",
+  "Reconnect to a specific MCP server",
+  {
+    serverName: z.string().describe("Name of the server to reconnect"),
+  },
+  async args => {
+    try {
+      await clientManager.reconnectToServer(args.serverName);
+
+      // Update stats after reconnection
+      const routerStats = clientManager.getStats();
+      stats.totalServers = routerStats.totalServers;
+      stats.connectedServers = routerStats.connectedServers;
+      stats.totalTools = routerStats.totalTools;
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              success: true,
+              message: `Successfully reconnected to server: ${args.serverName}`,
+              stats: {
+                totalServers: stats.totalServers,
+                connectedServers: stats.connectedServers,
+                totalTools: stats.totalTools,
+              },
+            }, null, 2),
+          },
+        ],
+      };
+    } catch (error: unknown) {
+      console.error(`Error reconnecting to server ${args.serverName}:`, error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error reconnecting to server ${args.serverName}: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
 );
 
 // Utility function to format uptime
@@ -320,14 +367,14 @@ const formatUptime = (ms: number): string => {
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
 
-  if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
-  if (hours > 0) return `${hours}h ${minutes % 60}m`;
-  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+  if (days > 0) {return `${days}d ${hours % 24}h ${minutes % 60}m`;}
+  if (hours > 0) {return `${hours}h ${minutes % 60}m`;}
+  if (minutes > 0) {return `${minutes}m ${seconds % 60}s`;}
   return `${seconds}s`;
-}
+};
 
 // MCP endpoint - handles all HTTP methods for stateless operation
-app.post('/mcp', async (req: Request, res: Response) => {
+app.post("/mcp", async (req: Request, res: Response) => {
   try {
     stats.requestCount++;
 
@@ -335,21 +382,21 @@ app.post('/mcp', async (req: Request, res: Response) => {
       sessionIdGenerator: undefined, // Stateless mode
     });
 
-    res.on('close', () => {
+    res.on("close", () => {
       transport.close();
     });
 
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
-  } catch (error) {
+  } catch (error: unknown) {
     stats.errorCount++;
-    console.error('Error handling MCP request:', error);
+    console.error("Error handling MCP request:", error);
     if (!res.headersSent) {
       res.status(500).json({
-        jsonrpc: '2.0',
+        jsonrpc: "2.0",
         error: {
           code: -32603,
-          message: 'Internal server error',
+          message: "Internal server error",
         },
         id: null,
       });
@@ -358,33 +405,33 @@ app.post('/mcp', async (req: Request, res: Response) => {
 });
 
 // Handle unsupported HTTP methods
-app.get('/mcp', async (req: Request, res: Response) => {
+app.get("/mcp", async (req: Request, res: Response) => {
   res.writeHead(405).end(JSON.stringify({
     jsonrpc: "2.0",
     error: {
       code: -32000,
-      message: "Method not allowed."
+      message: "Method not allowed.",
     },
-    id: null
+    id: null,
   }));
 });
 
-app.delete('/mcp', async (req: Request, res: Response) => {
+app.delete("/mcp", async (req: Request, res: Response) => {
   res.writeHead(405).end(JSON.stringify({
     jsonrpc: "2.0",
     error: {
       code: -32000,
-      message: "Method not allowed."
+      message: "Method not allowed.",
     },
-    id: null
+    id: null,
   }));
 });
 
 // Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
+app.get("/health", (req: Request, res: Response) => {
   const routerStats = clientManager.getStats();
   res.json({
-    status: 'healthy',
+    status: "healthy",
     service: config.routerName,
     version: config.routerVersion,
     timestamp: new Date().toISOString(),
@@ -392,19 +439,19 @@ app.get('/health', (req: Request, res: Response) => {
       ...routerStats,
       uptime: Date.now() - stats.uptime,
       requestCount: stats.requestCount,
-      errorCount: stats.errorCount
-    }
+      errorCount: stats.errorCount,
+    },
   });
 });
 
 // Configuration endpoint
-app.get('/config', (req: Request, res: Response) => {
+app.get("/config", (req: Request, res: Response) => {
   res.json({
     ...config,
     servers: config.servers.map(server => ({
       ...server,
       // Don't expose sensitive information
-    }))
+    })),
   });
 });
 
@@ -414,7 +461,7 @@ const main = async () => {
     const port = config.port || 4000;
 
     // Start with no servers - they will register themselves dynamically
-    console.log('Starting MCP Router with dynamic server registration...');
+    console.log("Starting MCP Router with dynamic server registration...");
 
     const routerStats = clientManager.getStats();
     stats.totalServers = routerStats.totalServers;
@@ -428,31 +475,32 @@ const main = async () => {
       console.log(`Configuration: http://localhost:${port}/config`);
       console.log(`Server registration: POST http://localhost:${port}/register`);
       console.log(`Server unregistration: DELETE http://localhost:${port}/register/<serverName>`);
-      console.log('\nRouter Status:');
+      console.log("\nRouter Status:");
       console.log(`   Total servers: ${stats.totalServers}`);
       console.log(`   Connected servers: ${stats.connectedServers}`);
       console.log(`   Total tools available: ${stats.totalTools}`);
-      console.log('\n🔧 Router Management Tools:');
-      console.log('   - router:list-servers: List all servers and their status');
-      console.log('   - router:list-tools: List all available tools from connected servers');
-      console.log('   - router:stats: Get router statistics');
-      console.log('   - router:register-server: Register a new MCP server');
-      console.log('   - router:unregister-server: Unregister an MCP server');
-      console.log('\n📡 Server Registration:');
-      console.log('   - MCP Tool: router:register-server');
-      console.log('   - MCP Tool: router:unregister-server');
-      console.log(`\nEnvironment: ${process.env.NODE_ENV || 'development'}`);
+      console.log("\n🔧 Router Management Tools:");
+      console.log("   - router:list-servers: List all servers and their status");
+      console.log("   - router:list-tools: List all available tools from connected servers");
+      console.log("   - router:stats: Get router statistics");
+      console.log("   - router:register-server: Register a new MCP server");
+      console.log("   - router:unregister-server: Unregister an MCP server");
+      console.log("   - router:reconnect-server: Reconnect to a specific server");
+      console.log("\n📡 Server Registration:");
+      console.log("   - MCP Tool: router:register-server");
+      console.log("   - MCP Tool: router:unregister-server");
+      console.log(`\nEnvironment: ${process.env.NODE_ENV || "development"}`);
 
-      console.log('\n🚀 Ready for server registrations!');
-      console.log('   Servers can register themselves by calling:');
+      console.log("\n🚀 Ready for server registrations!");
+      console.log("   Servers can register themselves by calling:");
       console.log(`   POST http://localhost:${port}/register`);
-      console.log('   with JSON body: {"name": "server-name", "url": "http://server:port/mcp"}');
+      console.log("   with JSON body: {\"name\": \"server-name\", \"url\": \"http://server:port/mcp\"}");
     });
-  } catch (error) {
-    console.error('Failed to start MCP Router:', error);
+  } catch (error: unknown) {
+    console.error("Failed to start MCP Router:", error);
     process.exit(1);
   }
-}
+};
 
 // Handle graceful shutdown
 const gracefulShutdown = async (signal: string) => {
@@ -460,19 +508,19 @@ const gracefulShutdown = async (signal: string) => {
 
   try {
     await clientManager.disconnectAll();
-    console.error('Disconnected from all MCP servers');
-  } catch (error) {
-    console.error('Error during shutdown:', error);
+    console.error("Disconnected from all MCP servers");
+  } catch (error: unknown) {
+    console.error("Error during shutdown:", error);
   }
 
   process.exit(0);
-}
+};
 
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 
 // Start the router
-main().catch((error) => {
-  console.error('Fatal error in main():', error);
+main().catch((error: unknown) => {
+  console.error("Fatal error in main():", error);
   process.exit(1);
 });
