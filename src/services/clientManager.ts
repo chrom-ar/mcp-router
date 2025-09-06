@@ -6,6 +6,7 @@ import { z, ZodRawShape } from "zod";
 import { ServerRepository } from "../repositories/serverRepository.js";
 import { EventLogger } from "./eventLogger.js";
 import { AuditLogger } from "./auditLogger.js";
+import { getRequestContext } from "./requestContext.js";
 
 import type {
   AggregatedTool,
@@ -402,6 +403,9 @@ export class ClientManager {
       if (this.auditLogger) {
         const durationMs = Date.now() - startTime;
 
+        // Get user context from async local storage
+        const context = getRequestContext();
+
         await this.auditLogger.logToolCall({
           serverName,
           toolName: actualToolName,
@@ -410,6 +414,9 @@ export class ClientManager {
           durationMs,
           status,
           errorMessage,
+          userId: context?.userId,
+          userEmail: context?.userEmail,
+          apiKey: context?.apiKey,
         }).catch(err => {
           console.error("Failed to log tool call audit:", err);
         });

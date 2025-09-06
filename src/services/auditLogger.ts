@@ -8,6 +8,9 @@ export interface ToolCallAudit {
   durationMs?: number;
   status: "success" | "error";
   errorMessage?: string;
+  userId?: string;
+  userEmail?: string;
+  apiKey?: string;
 }
 
 export interface ToolCallStats {
@@ -138,8 +141,8 @@ export class AuditLogger {
         for (const audit of auditsToFlush) {
           await client.query(
             `INSERT INTO tool_calls
-             (server_name, tool_name, arguments, response, duration_ms, status, error_message)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+             (server_name, tool_name, arguments, response, duration_ms, status, error_message, user_id, user_email, api_key_prefix)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
             [
               audit.serverName,
               audit.toolName,
@@ -148,6 +151,9 @@ export class AuditLogger {
               audit.durationMs || null,
               audit.status,
               audit.errorMessage || null,
+              audit.userId || null,
+              audit.userEmail || null,
+              audit.apiKey || null,
             ],
           );
         }

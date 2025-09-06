@@ -1,17 +1,19 @@
 #!/usr/bin/env node
 
 import express, { Request, Response } from "express";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import dotenv from "dotenv";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
+import { ServerRepository } from "./repositories/serverRepository.js";
 import { AuditLogger } from "./services/auditLogger.js";
+import { authMiddleware, getAuthConfig, getUserFromRequest } from "./services/auth.js";
 import { ClientManager } from "./services/clientManager.js";
 import { initDatabaseFromEnv } from "./services/database.js";
 import { EventLogger } from "./services/eventLogger.js";
 import { MigrationRunner } from "./services/migrationRunner.js";
-import { ServerRepository } from "./repositories/serverRepository.js";
+import { runWithContext } from "./services/requestContext.js";
 import type { RouterConfig, McpServerConfig, RouterStats } from "./types/index.js";
 
 // Load environment variables
@@ -29,6 +31,10 @@ const config: RouterConfig = {
 // Create Express app
 const app = express();
 app.use(express.json());
+
+// Setup authentication middleware
+const authConfig = getAuthConfig();
+app.use(authMiddleware(authConfig));
 
 // Create MCP server instance
 const server = new McpServer({
@@ -401,16 +407,27 @@ app.post("/mcp", async (req: Request, res: Response) => {
   try {
     stats.requestCount++;
 
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined, // Stateless mode
-    });
+    const user = getUserFromRequest(req);
 
-    res.on("close", () => {
-      transport.close();
-    });
+    const context = {
+      userId: user?.userId,
+      userEmail: user?.email,
+      apiKey: user?.apiKey,
+      requestId: req.headers["x-request-id"] as string || `req-${Date.now()}`,
+    };
 
-    await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
+    await runWithContext(context, async () => {
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+      });
+
+      res.on("close", () => {
+        transport.close();
+      });
+
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+    });
   } catch (error: unknown) {
     stats.errorCount++;
     console.error("Error handling MCP request:", error);
