@@ -1,0 +1,61 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - master
+
+env:
+  AWS_REGION: us-east-1
+  EKS_CLUSTER_NAME: chroma-cluster
+  ECR_REPOSITORY: chroma/mcp-router
+  NAMESPACE: mcp-router
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+
+    - name: Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login
+      id: login
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build
+      run: |
+        docker build -t ${{ steps.login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
+                     -t ${{ steps.login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest .
+
+    - name: Push
+      run: |
+        docker push ${{ steps.login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+        docker push ${{ steps.login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+
+    - name: Configure
+      run: |
+        aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+
+    - name: Deploy
+      run: |
+        # Update the deployment with the new image
+        kubectl set image deployment/mcp-router \
+          mcp-router=${{ steps.login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
+          -n ${{ env.NAMESPACE }}
+
+        # Wait for rollout to complete
+        kubectl rollout status deployment/mcp-router -n ${{ env.NAMESPACE }}
+
+    - name: Verify
+      run: |
+        kubectl get pods -n ${{ env.NAMESPACE }}
+        kubectl get services -n ${{ env.NAMESPACE }}
+        kubectl get ingress -n ${{ env.NAMESPACE }}
