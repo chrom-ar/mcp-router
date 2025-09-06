@@ -24,9 +24,12 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.17.5",
+    "@types/pg": "^8.15.5",
     "dotenv": "17.2.2",
     "express": "5.1.0",
     "json-schema-to-zod": "2.6.1",
+    "pg": "^8.16.3",
+    "umzug": "^3.8.2",
     "zod": "3.25.67"
   },
   "devDependencies": {

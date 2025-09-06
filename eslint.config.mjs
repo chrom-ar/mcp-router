@@ -15,6 +15,7 @@ export default [{
   },
 
   rules: {
+    "@typescript-eslint/no-explicit-any": "error",
     "@typescript-eslint/naming-convention": ["error", {
       selector: "import",
       format: ["camelCase", "PascalCase"],
@@ -35,4 +36,3 @@ export default [{
     "semi": "error",
   },
 }];
-

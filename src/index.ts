@@ -6,7 +6,12 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { z } from "zod";
 import dotenv from "dotenv";
 
+import { AuditLogger } from "./services/auditLogger.js";
 import { ClientManager } from "./services/clientManager.js";
+import { initDatabaseFromEnv } from "./services/database.js";
+import { EventLogger } from "./services/eventLogger.js";
+import { MigrationRunner } from "./services/migrationRunner.js";
+import { ServerRepository } from "./repositories/serverRepository.js";
 import type { RouterConfig, McpServerConfig, RouterStats } from "./types/index.js";
 
 // Load environment variables
@@ -31,7 +36,13 @@ const server = new McpServer({
   version: config.routerVersion || "1.0.0",
 });
 
-// Initialize client manager
+// Initialize database and persistence services (async setup in main())
+let database: ReturnType<typeof initDatabaseFromEnv> | null = null;
+let serverRepository: ServerRepository | undefined;
+let eventLogger: EventLogger | undefined;
+let auditLogger: AuditLogger | undefined;
+
+// Initialize client manager (will be updated with persistence in main())
 const clientManager = new ClientManager(config.toolNameSeparator);
 
 // Router stats
@@ -202,9 +213,19 @@ server.tool(
 
       // This should happen here, for some reason inside the buildServerTools it's not working
       const tools = await clientManager.buildServerTools(serverConfig);
-      for (const tool of tools) {
-        server.tool(tool.name, tool.description, tool.schema.shape, tool.handler);
-        console.log(`Registered tool: ${tool.name}`);
+
+      if (tools) {
+        for (const tool of tools) {
+          (server.tool as unknown as (name: string, description: string, schema: unknown, handler: unknown) => void)(
+            tool.name,
+            tool.description,
+            tool.schema,
+            async (args: Record<string, unknown>, extra?: unknown) => {
+              return await tool.handler(args, extra);
+            },
+          );
+          // console.log(`Registered tool: ${tool.name}`);
+        }
       }
 
       // Update stats
@@ -428,13 +449,29 @@ app.delete("/mcp", async (req: Request, res: Response) => {
 });
 
 // Health check endpoint
-app.get("/health", (req: Request, res: Response) => {
+app.get("/health", async (req: Request, res: Response) => {
   const routerStats = clientManager.getStats();
+  let databaseStatus: { connected: boolean; healthy: boolean; latency?: number } = { connected: false, healthy: false };
+
+  if (database) {
+    try {
+      const dbHealth = await database.healthCheck();
+      databaseStatus = {
+        connected: true,
+        healthy: dbHealth.healthy,
+        latency: dbHealth.latency,
+      };
+    } catch (error: unknown) {
+      databaseStatus = { connected: false, healthy: false };
+    }
+  }
+
   res.json({
     status: "healthy",
     service: config.routerName,
     version: config.routerVersion,
     timestamp: new Date().toISOString(),
+    database: databaseStatus,
     stats: {
       ...routerStats,
       uptime: Date.now() - stats.uptime,
@@ -459,6 +496,49 @@ app.get("/config", (req: Request, res: Response) => {
 const main = async () => {
   try {
     const port = config.port || 4000;
+
+    // Initialize database if configured
+    if (process.env.DATABASE_URL || process.env.DB_HOST) {
+      try {
+        console.log("Initializing database connection...");
+
+        database = initDatabaseFromEnv();
+
+        await database.connect();
+
+        if (process.env.RUN_MIGRATIONS !== "false") {
+          console.log("Running database migrations...");
+
+          const migrationRunner = new MigrationRunner(database);
+
+          await migrationRunner.up();
+        }
+
+        serverRepository = new ServerRepository(database);
+        eventLogger = new EventLogger(database, {
+          enabled: process.env.ENABLE_EVENT_LOG !== "false",
+        });
+        auditLogger = new AuditLogger(database, {
+          enabled: process.env.ENABLE_AUDIT_LOG === "true",
+        });
+
+        const newClientManager = new ClientManager(config.toolNameSeparator || ":", {
+          serverRepository,
+          eventLogger,
+          auditLogger,
+        });
+
+        Object.assign(clientManager, newClientManager);
+
+        console.log("Database initialized successfully");
+
+        // Load persisted servers
+        await clientManager.loadPersistedServers();
+      } catch (dbError: unknown) {
+        console.error("Failed to initialize database:", dbError);
+        console.log("Continuing without persistence...");
+      }
+    }
 
     // Start with no servers - they will register themselves dynamically
     console.log("Starting MCP Router with dynamic server registration...");
@@ -509,6 +589,20 @@ const gracefulShutdown = async (signal: string) => {
   try {
     await clientManager.disconnectAll();
     console.error("Disconnected from all MCP servers");
+
+    if (eventLogger) {
+      await eventLogger.shutdown();
+    }
+
+    if (auditLogger) {
+      await auditLogger.shutdown();
+    }
+
+    if (database) {
+      await database.disconnect();
+
+      console.error("Database connection closed");
+    }
   } catch (error: unknown) {
     console.error("Error during shutdown:", error);
   }

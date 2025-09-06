@@ -23,13 +23,20 @@ vi.mock("json-schema-to-zod", () => ({
   }),
 }));
 
-const MockedClient = Client as any;
-const MockedTransport = StreamableHTTPClientTransport as any;
+const MockedClient = Client as unknown as vi.MockedClass<typeof Client>;
+const MockedTransport = StreamableHTTPClientTransport as unknown as vi.MockedClass<typeof StreamableHTTPClientTransport>;
 
 describe("ClientManager", () => {
   let clientManager: ClientManager;
-  let mockClient: any;
-  let mockTransport: any;
+  let mockClient: {
+    connect: ReturnType<typeof vi.fn>;
+    listTools: ReturnType<typeof vi.fn>;
+    callTool: ReturnType<typeof vi.fn>;
+    onerror: null | ((error: Error) => void);
+  };
+  let mockTransport: {
+    close: ReturnType<typeof vi.fn>;
+  };
 
   const mockServerConfig: McpServerConfig = {
     name: "test-server",
@@ -180,7 +187,8 @@ describe("ClientManager", () => {
 
     // Simulate disconnection
     const statuses = clientManager.getServerStatuses();
-    const connection = (clientManager as any).connections.get("test-server");
+    // Access private property for testing
+    const connection = (clientManager as unknown as { connections: Map<string, { status: { connected: boolean } }> }).connections.get("test-server");
     connection.status.connected = false;
 
     await expect(clientManager.callTool("test-server:test-tool-1", {}))

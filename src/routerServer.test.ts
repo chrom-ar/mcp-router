@@ -6,10 +6,10 @@
  * tool calls correctly.
  */
 
-import { describe, test, expect, beforeAll, afterAll, vi } from "vitest";
+import { spawn, ChildProcess } from "child_process";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { spawn, ChildProcess } from "child_process";
+import { describe, test, expect, beforeAll, afterAll, vi } from "vitest";
 
 describe("MCP Router Server", () => {
   let client: Client;
@@ -137,7 +137,7 @@ describe("MCP Router Server", () => {
     expect(tools.tools).toBeDefined();
     expect(Array.isArray(tools.tools)).toBe(true);
 
-    const toolNames = tools.tools?.map((tool: any) => tool.name) || [];
+    const toolNames = tools.tools?.map((tool: { name: string }) => tool.name) || [];
 
     // Check for router management tools
     expect(toolNames).toContain("router:list-servers");
@@ -145,10 +145,10 @@ describe("MCP Router Server", () => {
     expect(toolNames).toContain("router:stats");
 
     // Verify tool descriptions
-    const listServersTool = tools.tools?.find((tool: any) => tool.name === "router:list-servers");
+    const listServersTool = tools.tools?.find((tool: { name: string; description?: string }) => tool.name === "router:list-servers");
     expect(listServersTool?.description).toBe("List all configured MCP servers and their status");
 
-    const statsTool = tools.tools?.find((tool: any) => tool.name === "router:stats");
+    const statsTool = tools.tools?.find((tool: { name: string; description?: string }) => tool.name === "router:stats");
     expect(statsTool?.description).toBe("Get router statistics and performance metrics");
   });
 
@@ -161,9 +161,9 @@ describe("MCP Router Server", () => {
     expect(result).toBeDefined();
     expect(result.content).toBeDefined();
     expect(Array.isArray(result.content)).toBe(true);
-    expect((result.content as any[]).length).toBeGreaterThan(0);
+    expect((result.content as Array<{ type: string; text: string }>).length).toBeGreaterThan(0);
 
-    const content = result.content as any[];
+    const content = result.content as Array<{ type: string; text: string }>;
     const resultText = content[0].text;
     expect(resultText).toBeDefined();
     expect(typeof resultText).toBe("string");
@@ -190,9 +190,9 @@ describe("MCP Router Server", () => {
     expect(result).toBeDefined();
     expect(result.content).toBeDefined();
     expect(Array.isArray(result.content)).toBe(true);
-    expect((result.content as any[]).length).toBeGreaterThan(0);
+    expect((result.content as Array<{ type: string; text: string }>).length).toBeGreaterThan(0);
 
-    const content = result.content as any[];
+    const content = result.content as Array<{ type: string; text: string }>;
     const resultText = content[0].text;
     expect(resultText).toBeDefined();
     expect(typeof resultText).toBe("string");
@@ -221,9 +221,9 @@ describe("MCP Router Server", () => {
     expect(result).toBeDefined();
     expect(result.content).toBeDefined();
     expect(Array.isArray(result.content)).toBe(true);
-    expect((result.content as any[]).length).toBeGreaterThan(0);
+    expect((result.content as Array<{ type: string; text: string }>).length).toBeGreaterThan(0);
 
-    const content = result.content as any[];
+    const content = result.content as Array<{ type: string; text: string }>;
     const resultText = content[0].text;
     expect(resultText).toBeDefined();
     expect(typeof resultText).toBe("string");
@@ -274,7 +274,7 @@ describe("MCP Router Server", () => {
     // Should at least have router management tools
     expect(tools.tools?.length).toBeGreaterThanOrEqual(3);
 
-    const toolNames = tools.tools?.map((tool: any) => tool.name) || [];
+    const toolNames = tools.tools?.map((tool: { name: string }) => tool.name) || [];
 
     // Check if there are any aggregated tools (with separator)
     const aggregatedTools = toolNames.filter(name => name.includes(":") && !name.startsWith("router:"));
@@ -301,9 +301,9 @@ describe("MCP Router Server", () => {
 
     expect(results.length).toBe(3);
 
-    const firstListResult = JSON.parse((results[0].content as any[])[0].text);
-    const statsResult = JSON.parse((results[1].content as any[])[0].text);
-    const secondListResult = JSON.parse((results[2].content as any[])[0].text);
+    const firstListResult = JSON.parse((results[0].content as Array<{ text: string }>)[0].text);
+    const statsResult = JSON.parse((results[1].content as Array<{ text: string }>)[0].text);
+    const secondListResult = JSON.parse((results[2].content as Array<{ text: string }>)[0].text);
 
     // Server counts should be consistent
     expect(firstListResult.summary.totalServers).toBe(statsResult.totalServers);

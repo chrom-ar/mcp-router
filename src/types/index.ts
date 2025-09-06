@@ -22,6 +22,9 @@ export interface McpServerConfig {
   retryAttempts?: number;
 }
 
+// Input configuration for creating/updating servers (id is optional/generated)
+export type McpServerConfigInput = Omit<McpServerConfig, "id"> & { id?: string; };
+
 // Router configuration
 export interface RouterConfig {
   servers: McpServerConfig[];
@@ -31,12 +34,27 @@ export interface RouterConfig {
   toolNameSeparator?: string; // Used to separate server name from tool name (e.g., "server:tool")
 }
 
+// Tool handler types - matches MCP SDK's CallToolResult
+export type ToolHandlerResult = {
+  content: Array<{
+    type: string;
+    text?: string;
+    data?: unknown;
+    [key: string]: unknown;
+  }>;
+  isError?: boolean;
+  _meta?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
+export type ToolHandlerArgs = Record<string, unknown>;
+
 // Aggregated tool with server information
 export interface AggregatedTool {
   name: string;
   description: string;
   schema: ZodRawShape;
-  handler: (args: any) => Promise<any>;
+  handler: (args: ToolHandlerArgs, extra?: unknown) => Promise<ToolHandlerResult>;
 }
 
 // Server connection status
