@@ -30,7 +30,7 @@ export class MigrationRunner {
 
     this.umzug = new Umzug({
       migrations: {
-        glob: path.join(__dirname, "../migrations/*.{js,ts}"),
+        glob: path.join(__dirname, "../migrations/*.js"),
         resolve: ({ name, path: filepath, context }) => {
           return {
             name,
