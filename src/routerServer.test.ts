@@ -1,15 +1,7 @@
-/**
- * Tests for the MCP Router Server
- *
- * This test suite validates the MCP router functionality using the Model Context Protocol.
- * Tests verify that the router can connect to backend servers, aggregate tools, and route
- * tool calls correctly.
- */
-
 import { spawn, ChildProcess } from "child_process";
+import { describe, test, expect, beforeAll, afterAll, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { describe, test, expect, beforeAll, afterAll, vi } from "vitest";
 
 describe("MCP Router Server", () => {
   let client: Client;
@@ -18,7 +10,6 @@ describe("MCP Router Server", () => {
   const routerUrl = "http://localhost:4001"; // Use different port for testing
 
   beforeAll(async () => {
-    // Start the router HTTP server
     routerProcess = spawn("node", ["dist/index.js"], {
       env: {
         ...process.env,

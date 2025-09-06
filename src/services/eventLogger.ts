@@ -37,14 +37,11 @@ export class EventLogger {
       return;
     }
 
-    // Add to batch queue
     this.batchQueue.push(event);
 
-    // Flush if batch size reached
     if (this.batchQueue.length >= this.batchSize) {
       await this.flush();
     } else {
-      // Schedule batch flush if not already scheduled
       this.scheduleBatchFlush();
     }
   }
@@ -135,18 +132,16 @@ export class EventLogger {
       return;
     }
 
-    // Clear timer
     if (this.batchTimer) {
       clearTimeout(this.batchTimer);
+
       this.batchTimer = null;
     }
 
-    // Get events to flush
     const eventsToFlush = [...this.batchQueue];
     this.batchQueue = [];
 
     try {
-      // Batch insert events
       await this.database.transaction(async client => {
         for (const event of eventsToFlush) {
           await client.query(
@@ -155,9 +150,8 @@ export class EventLogger {
           );
         }
       });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Failed to log events to database:", error);
-      // Don't re-add to queue to avoid infinite loop
     }
   }
 
@@ -166,11 +160,11 @@ export class EventLogger {
    */
   async getServerEvents(serverName: string, limit = 100): Promise<ServerEventRecord[]> {
     const result = await this.database.query<ServerEventRecord>(
-      `SELECT se.*, s.name as server_name 
-       FROM server_events se 
-       JOIN servers s ON se.server_id = s.id 
-       WHERE s.name = $1 
-       ORDER BY se.created_at DESC 
+      `SELECT se.*, s.name as server_name
+       FROM server_events se
+       JOIN servers s ON se.server_id = s.id
+       WHERE s.name = $1
+       ORDER BY se.created_at DESC
        LIMIT $2`,
       [serverName, limit],
     );
@@ -182,11 +176,11 @@ export class EventLogger {
    */
   async getEventsByType(eventType: EventType, limit = 100): Promise<ServerEventRecord[]> {
     const result = await this.database.query<ServerEventRecord>(
-      `SELECT se.*, s.name as server_name 
-       FROM server_events se 
-       JOIN servers s ON se.server_id = s.id 
-       WHERE se.event_type = $1 
-       ORDER BY se.created_at DESC 
+      `SELECT se.*, s.name as server_name
+       FROM server_events se
+       JOIN servers s ON se.server_id = s.id
+       WHERE se.event_type = $1
+       ORDER BY se.created_at DESC
        LIMIT $2`,
       [eventType, limit],
     );
@@ -198,10 +192,10 @@ export class EventLogger {
    */
   async getServerHealth(serverName: string, hoursBack = 24): Promise<ServerEventRecord[]> {
     const result = await this.database.query<ServerEventRecord>(
-      `SELECT se.*, s.name as server_name 
-       FROM server_events se 
-       JOIN servers s ON se.server_id = s.id 
-       WHERE s.name = $1 
+      `SELECT se.*, s.name as server_name
+       FROM server_events se
+       JOIN servers s ON se.server_id = s.id
+       WHERE s.name = $1
          AND se.event_type IN ('connected', 'disconnected', 'error')
          AND se.created_at > NOW() - INTERVAL '$2 hours'
        ORDER BY se.created_at DESC`,
@@ -227,8 +221,10 @@ export class EventLogger {
   async shutdown(): Promise<void> {
     if (this.batchTimer) {
       clearTimeout(this.batchTimer);
+
       this.batchTimer = null;
     }
+
     await this.flush();
   }
 }
