@@ -179,20 +179,22 @@ server.tool(
   "router:register-server",
   "Register a new MCP server with the router",
   {
-    id: z.string().describe("Unique identifier for the server"),
     name: z.string().describe("Unique name for the server"),
     url: z.string().describe("URL of the MCP server endpoint"),
     description: z.string().optional().describe("Optional description of the server"),
     enabled: z.boolean().optional().default(true).describe("Whether the server should be enabled"),
+    autoReconnect: z.boolean().optional().default(true).describe("Whether to auto-reconnect on ping failures"),
   },
   async args => {
     try {
+      // Don't provide an ID - let the database generate a stable one based on the name
       const serverConfig: McpServerConfig = {
-        id: args.id,
+        id: "", // Will be filled by the database
         name: args.name,
         url: args.url,
         description: args.description || `MCP Server: ${args.name}`,
         enabled: args.enabled ?? true,
+        autoReconnect: args.autoReconnect ?? true,
       };
 
       // Check if server with this name already exists

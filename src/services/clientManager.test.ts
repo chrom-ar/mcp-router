@@ -467,6 +467,30 @@ describe("ClientManager", () => {
     vi.useRealTimers();
   });
 
+  test("should use consistent server ID across reconnections", async () => {
+    // First connection
+    await clientManager.connectToServers([mockServerConfig]);
+
+    const firstStatuses = clientManager.getServerStatuses();
+    const firstServerId = firstStatuses[0].name; // This will be "test-server" since no DB
+
+    // Disconnect
+    await clientManager.disconnectAll();
+
+    // Reconnect with same config
+    await clientManager.connectToServers([mockServerConfig]);
+
+    const secondStatuses = clientManager.getServerStatuses();
+    const secondServerId = secondStatuses[0].name;
+
+    // Server ID should be consistent
+    expect(secondServerId).toBe(firstServerId);
+
+    // Tools should use the same prefixed names
+    const tools = clientManager.getAllTools();
+    expect(tools[0].name).toBe("test-server-id:test-tool-1");
+  });
+
   test("should only return tools from connected servers", async () => {
     const server2Config: McpServerConfig = {
       id: "disconnected-server-id",
