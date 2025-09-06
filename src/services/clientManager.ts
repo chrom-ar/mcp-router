@@ -22,6 +22,8 @@ interface ClientConnection {
   config: McpServerConfig;
   status: ServerStatus;
   tools: AggregatedTool[];
+  lastPingTime?: Date;
+  consecutivePingFailures?: number;
 }
 
 export class ClientManager {
@@ -31,6 +33,9 @@ export class ClientManager {
   private serverRepository?: ServerRepository;
   private eventLogger?: EventLogger;
   private auditLogger?: AuditLogger;
+  private pingInterval?: NodeJS.Timeout;
+  private pingIntervalMs: number;
+  private maxConsecutivePingFailures: number;
 
   constructor(
     toolNameSeparator: string = ":",
@@ -38,12 +43,16 @@ export class ClientManager {
       serverRepository?: ServerRepository;
       eventLogger?: EventLogger;
       auditLogger?: AuditLogger;
+      pingIntervalMs?: number;
+      maxConsecutivePingFailures?: number;
     },
   ) {
     this.toolNameSeparator = toolNameSeparator;
     this.serverRepository = options?.serverRepository;
     this.eventLogger = options?.eventLogger;
     this.auditLogger = options?.auditLogger;
+    this.pingIntervalMs = options?.pingIntervalMs || 30000; // Default: 30 seconds
+    this.maxConsecutivePingFailures = options?.maxConsecutivePingFailures || 3; // Default: 3 failures before marking as disconnected
   }
 
   /**
@@ -60,6 +69,7 @@ export class ClientManager {
 
       if (servers.length > 0) {
         await this.connectToServers(servers);
+        this.startPingInterval();
       }
     } catch (error: unknown) {
       console.error("Failed to load persisted servers:", error);
@@ -76,6 +86,11 @@ export class ClientManager {
       .map(config => this.connectToServer(config));
 
     await Promise.allSettled(connectionPromises);
+
+    // Start ping interval if we have connected servers
+    if (this.connections.size > 0) {
+      this.startPingInterval();
+    }
   }
 
   /**
@@ -131,6 +146,8 @@ export class ClientManager {
         config,
         status,
         tools: [],
+        lastPingTime: new Date(),
+        consecutivePingFailures: 0,
       };
 
       this.connections.set(serverId, connection);
@@ -493,9 +510,117 @@ export class ClientManager {
   }
 
   /**
+   * Start periodic ping to all connected servers
+   */
+  private startPingInterval(): void {
+    // Clear existing interval if any
+    this.stopPingInterval();
+
+    this.pingInterval = setInterval(async () => {
+      await this.pingAllServers();
+    }, this.pingIntervalMs);
+  }
+
+  /**
+   * Stop periodic ping
+   */
+  private stopPingInterval(): void {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = undefined;
+    }
+  }
+
+  /**
+   * Ping all connected servers
+   */
+  private async pingAllServers(): Promise<void> {
+    const pingPromises = Array.from(this.connections.entries()).map(async ([serverId, connection]) => {
+      if (!connection.status.connected) {
+        return;
+      }
+
+      try {
+        // Use the MCP protocol's ping method
+        await connection.client.ping();
+
+        // Reset failure counter on successful ping
+        connection.lastPingTime = new Date();
+        connection.consecutivePingFailures = 0;
+
+        // Update status if it was previously marked as having issues
+        if (connection.status.lastError?.includes("ping")) {
+          connection.status.lastError = undefined;
+        }
+      } catch (error: unknown) {
+        connection.consecutivePingFailures = (connection.consecutivePingFailures || 0) + 1;
+
+        const errorMessage = error instanceof Error ? error.message : "Ping failed";
+        console.error(`Ping failed for server ${connection.config.name}: ${errorMessage}`);
+
+        // Mark server as disconnected if too many consecutive failures
+        if (connection.consecutivePingFailures >= this.maxConsecutivePingFailures) {
+          connection.status.connected = false;
+          connection.status.lastError = `Server not responding to ping (${connection.consecutivePingFailures} consecutive failures)`;
+
+          // Log the disconnection
+          if (this.eventLogger && connection.config.id) {
+            await this.eventLogger.logDisconnection(
+              connection.config.id,
+              connection.config.name,
+              `Ping timeout after ${connection.consecutivePingFailures} failures`,
+            );
+          }
+
+          // Optionally try to reconnect
+          if (connection.config.autoReconnect !== false) {
+            console.log(`Attempting to reconnect to ${connection.config.name}...`);
+            try {
+              await this.reconnectToServer(serverId);
+            } catch (reconnectError: unknown) {
+              console.error(`Failed to reconnect to ${connection.config.name}:`, reconnectError);
+            }
+          }
+        }
+      }
+    });
+
+    await Promise.allSettled(pingPromises);
+  }
+
+  /**
+   * Manually ping a specific server
+   */
+  async pingServer(serverName: string): Promise<boolean> {
+    const connection = this.connections.get(serverName);
+
+    if (!connection) {
+      throw new Error(`Server ${serverName} not found`);
+    }
+
+    if (!connection.status.connected) {
+      return false;
+    }
+
+    try {
+      await connection.client.ping();
+      connection.lastPingTime = new Date();
+      connection.consecutivePingFailures = 0;
+      return true;
+    } catch (error: unknown) {
+      connection.consecutivePingFailures = (connection.consecutivePingFailures || 0) + 1;
+      const errorMessage = error instanceof Error ? error.message : "Ping failed";
+      console.error(`Ping failed for server ${serverName}: ${errorMessage}`);
+      return false;
+    }
+  }
+
+  /**
    * Disconnect from all servers
    */
   async disconnectAll(): Promise<void> {
+    // Stop pinging before disconnecting
+    this.stopPingInterval();
     const disconnectPromises = Array.from(this.connections.values()).map(async connection => {
       if (connection.transport) {
         try {

@@ -526,6 +526,8 @@ const main = async () => {
           serverRepository,
           eventLogger,
           auditLogger,
+          pingIntervalMs: Number(process.env.PING_INTERVAL_MS) || 30000,
+          maxConsecutivePingFailures: Number(process.env.MAX_PING_FAILURES) || 3,
         });
 
         Object.assign(clientManager, newClientManager);

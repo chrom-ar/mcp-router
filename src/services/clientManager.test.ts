@@ -5,7 +5,7 @@
  * including server connection management, tool aggregation, and error handling.
  */
 
-import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, test, expect, beforeEach, afterEach, vi, type MockedClass } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { ClientManager } from "./clientManager.js";
@@ -23,8 +23,8 @@ vi.mock("json-schema-to-zod", () => ({
   }),
 }));
 
-const MockedClient = Client as unknown as vi.MockedClass<typeof Client>;
-const MockedTransport = StreamableHTTPClientTransport as unknown as vi.MockedClass<typeof StreamableHTTPClientTransport>;
+const MockedClient = Client as unknown as MockedClass<typeof Client>;
+const MockedTransport = StreamableHTTPClientTransport as unknown as MockedClass<typeof StreamableHTTPClientTransport>;
 
 describe("ClientManager", () => {
   let clientManager: ClientManager;
@@ -32,6 +32,7 @@ describe("ClientManager", () => {
     connect: ReturnType<typeof vi.fn>;
     listTools: ReturnType<typeof vi.fn>;
     callTool: ReturnType<typeof vi.fn>;
+    ping: ReturnType<typeof vi.fn>;
     onerror: null | ((error: Error) => void);
   };
   let mockTransport: {
@@ -39,6 +40,7 @@ describe("ClientManager", () => {
   };
 
   const mockServerConfig: McpServerConfig = {
+    id: "test-server-id",
     name: "test-server",
     url: "http://localhost:3000/mcp",
     description: "Test server",
@@ -73,6 +75,7 @@ describe("ClientManager", () => {
       connect: vi.fn().mockResolvedValue(undefined),
       listTools: vi.fn().mockResolvedValue({ tools: mockTools }),
       callTool: vi.fn().mockResolvedValue({ content: [{ type: "text", text: "Mock result" }] }),
+      ping: vi.fn().mockResolvedValue({}),
       onerror: null,
     };
 
@@ -82,8 +85,8 @@ describe("ClientManager", () => {
     };
 
     // Mock constructors
-    MockedClient.mockImplementation(() => mockClient);
-    MockedTransport.mockImplementation(() => mockTransport);
+    MockedClient.mockImplementation(() => mockClient as unknown as Client);
+    MockedTransport.mockImplementation(() => mockTransport as unknown as StreamableHTTPClientTransport);
 
     // Create client manager instance
     clientManager = new ClientManager(":");
@@ -147,10 +150,10 @@ describe("ClientManager", () => {
     const allTools = clientManager.getAllTools();
     expect(allTools).toHaveLength(2);
 
-    expect(allTools[0].name).toBe("test-server:test-tool-1");
+    expect(allTools[0].name).toBe("test-server-id:test-tool-1");
     expect(allTools[0].description).toContain("Test tool 1");
 
-    expect(allTools[1].name).toBe("test-server:test-tool-2");
+    expect(allTools[1].name).toBe("test-server-id:test-tool-2");
     expect(allTools[1].description).toContain("Test tool 2");
   });
 
@@ -159,13 +162,13 @@ describe("ClientManager", () => {
     await customManager.connectToServers([mockServerConfig]);
 
     const allTools = customManager.getAllTools();
-    expect(allTools[0].name).toBe("test-server|test-tool-1");
+    expect(allTools[0].name).toBe("test-server-id|test-tool-1");
   });
 
   test("should call tools on the correct server", async () => {
     await clientManager.connectToServers([mockServerConfig]);
 
-    const result = await clientManager.callTool("test-server:test-tool-1", { param1: "value" });
+    const result = await clientManager.callTool("test-server-id:test-tool-1", { param1: "value" });
 
     expect(mockClient.callTool).toHaveBeenCalledWith({
       name: "test-tool-1",
@@ -188,11 +191,14 @@ describe("ClientManager", () => {
     // Simulate disconnection
     const statuses = clientManager.getServerStatuses();
     // Access private property for testing
-    const connection = (clientManager as unknown as { connections: Map<string, { status: { connected: boolean } }> }).connections.get("test-server");
-    connection.status.connected = false;
+    const connection = (clientManager as unknown as { connections: Map<string, { status: { connected: boolean } }> }).connections.get("test-server-id");
 
-    await expect(clientManager.callTool("test-server:test-tool-1", {}))
-      .rejects.toThrow("Server test-server is not connected");
+    if (connection) {
+      connection.status.connected = false;
+    }
+
+    await expect(clientManager.callTool("test-server-id:test-tool-1", {}))
+      .rejects.toThrow("Server test-server-id is not connected");
   });
 
   test("should get server statuses", async () => {
@@ -218,6 +224,7 @@ describe("ClientManager", () => {
 
   test("should handle multiple servers", async () => {
     const server2Config: McpServerConfig = {
+      id: "test-server-2-id",
       name: "test-server-2",
       url: "http://localhost:3001/mcp",
       description: "Test server 2",
@@ -237,11 +244,12 @@ describe("ClientManager", () => {
       connect: vi.fn().mockResolvedValue(undefined),
       listTools: vi.fn().mockResolvedValue({ tools: mockTools2 }),
       callTool: vi.fn().mockResolvedValue({ content: [{ type: "text", text: "Result from server 2" }] }),
+      ping: vi.fn().mockResolvedValue({}),
       onerror: null,
     };
 
-    MockedClient.mockImplementationOnce(() => mockClient)
-      .mockImplementationOnce(() => mockClient2);
+    MockedClient.mockImplementationOnce(() => mockClient as unknown as Client)
+      .mockImplementationOnce(() => mockClient2 as unknown as Client);
 
     await clientManager.connectToServers([mockServerConfig, server2Config]);
 
@@ -254,13 +262,13 @@ describe("ClientManager", () => {
     expect(stats.totalTools).toBe(3);
 
     // Test calling tools from different servers
-    const result1 = await clientManager.callTool("test-server:test-tool-1", {});
+    const result1 = await clientManager.callTool("test-server-id:test-tool-1", {});
     expect(mockClient.callTool).toHaveBeenCalledWith({
       name: "test-tool-1",
       arguments: {},
     });
 
-    const result2 = await clientManager.callTool("test-server-2:tool-a", {});
+    const result2 = await clientManager.callTool("test-server-2-id:tool-a", {});
     expect(mockClient2.callTool).toHaveBeenCalledWith({
       name: "tool-a",
       arguments: {},
@@ -275,18 +283,19 @@ describe("ClientManager", () => {
       connect: vi.fn().mockResolvedValue(undefined),
       listTools: vi.fn().mockResolvedValue({ tools: mockTools }),
       callTool: vi.fn().mockResolvedValue({ content: [{ type: "text", text: "Reconnected result" }] }),
+      ping: vi.fn().mockResolvedValue({}),
       onerror: null,
     };
 
-    MockedClient.mockImplementationOnce(() => newMockClient);
+    MockedClient.mockImplementationOnce(() => newMockClient as unknown as Client);
 
-    await clientManager.reconnectToServer("test-server");
+    await clientManager.reconnectToServer("test-server-id");
 
     expect(mockTransport.close).toHaveBeenCalled();
     expect(newMockClient.connect).toHaveBeenCalled();
 
     // Old routes should be cleared and new ones created
-    const result = await clientManager.callTool("test-server:test-tool-1", {});
+    const result = await clientManager.callTool("test-server-id:test-tool-1", {});
     expect(newMockClient.callTool).toHaveBeenCalled();
   });
 
@@ -311,6 +320,7 @@ describe("ClientManager", () => {
 
   test("should disconnect all servers", async () => {
     const server2Config: McpServerConfig = {
+      id: "test-server-2-id",
       name: "test-server-2",
       url: "http://localhost:3001/mcp",
       enabled: true,
@@ -320,8 +330,8 @@ describe("ClientManager", () => {
       close: vi.fn().mockResolvedValue(undefined),
     };
 
-    MockedTransport.mockImplementationOnce(() => mockTransport)
-      .mockImplementationOnce(() => mockTransport2);
+    MockedTransport.mockImplementationOnce(() => mockTransport as unknown as StreamableHTTPClientTransport)
+      .mockImplementationOnce(() => mockTransport2 as unknown as StreamableHTTPClientTransport);
 
     await clientManager.connectToServers([mockServerConfig, server2Config]);
 
@@ -345,8 +355,121 @@ describe("ClientManager", () => {
     await expect(clientManager.disconnectAll()).resolves.toBeUndefined();
   });
 
+  test("should ping a server successfully", async () => {
+    mockClient.ping.mockResolvedValue({});
+
+    await clientManager.connectToServers([mockServerConfig]);
+
+    const result = await clientManager.pingServer("test-server-id");
+
+    expect(result).toBe(true);
+    expect(mockClient.ping).toHaveBeenCalled();
+  });
+
+  test("should handle ping failure", async () => {
+    mockClient.ping.mockRejectedValue(new Error("Ping failed"));
+
+    await clientManager.connectToServers([mockServerConfig]);
+
+    const result = await clientManager.pingServer("test-server-id");
+
+    expect(result).toBe(false);
+    expect(mockClient.ping).toHaveBeenCalled();
+  });
+
+  test("should return false when pinging disconnected server", async () => {
+    await clientManager.connectToServers([mockServerConfig]);
+
+    // Mark server as disconnected
+    const connection = (clientManager as unknown as { connections: Map<string, { status: { connected: boolean } }> }).connections.get("test-server-id");
+    if (connection) {
+      connection.status.connected = false;
+    }
+
+    const result = await clientManager.pingServer("test-server-id");
+
+    expect(result).toBe(false);
+  });
+
+  test("should throw error when pinging unknown server", async () => {
+    await expect(clientManager.pingServer("unknown-server"))
+      .rejects.toThrow("Server unknown-server not found");
+  });
+
+  test("should start ping interval when connecting to servers", async () => {
+    vi.useFakeTimers();
+
+    const manager = new ClientManager(":", {
+      pingIntervalMs: 1000,
+      maxConsecutivePingFailures: 2,
+    });
+
+    mockClient.ping.mockResolvedValue({});
+
+    await manager.connectToServers([mockServerConfig]);
+
+    // Advance time to trigger ping
+    vi.advanceTimersByTime(1000);
+    await Promise.resolve();
+
+    expect(mockClient.ping).toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
+  test("should mark server as disconnected after max ping failures", async () => {
+    vi.useFakeTimers();
+
+    const manager = new ClientManager(":", {
+      pingIntervalMs: 1000,
+      maxConsecutivePingFailures: 2,
+    });
+
+    mockClient.ping.mockRejectedValue(new Error("Ping failed"));
+
+    await manager.connectToServers([mockServerConfig]);
+
+    // First ping failure
+    vi.advanceTimersByTime(1000);
+    await Promise.resolve();
+
+    // Second ping failure (should mark as disconnected)
+    vi.advanceTimersByTime(1000);
+    await Promise.resolve();
+
+    const statuses = manager.getServerStatuses();
+    expect(statuses[0].connected).toBe(false);
+    expect(statuses[0].lastError).toContain("Server not responding to ping");
+
+    vi.useRealTimers();
+  });
+
+  test("should stop ping interval on disconnect all", async () => {
+    vi.useFakeTimers();
+
+    const manager = new ClientManager(":", {
+      pingIntervalMs: 1000,
+    });
+
+    mockClient.ping.mockResolvedValue({});
+
+    await manager.connectToServers([mockServerConfig]);
+
+    await manager.disconnectAll();
+
+    // Advance time - ping should not be called after disconnect
+    mockClient.ping.mockClear();
+    vi.advanceTimersByTime(2000);
+    await Promise.resolve();
+
+    expect(mockClient.ping).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
   test("should only return tools from connected servers", async () => {
     const server2Config: McpServerConfig = {
+      id: "disconnected-server-id",
       name: "disconnected-server",
       url: "http://localhost:3001/mcp",
       enabled: true,
@@ -357,8 +480,8 @@ describe("ClientManager", () => {
       connect: vi.fn().mockRejectedValue(new Error("Connection failed")),
     };
 
-    MockedClient.mockImplementationOnce(() => mockClient)
-      .mockImplementationOnce(() => failingClient);
+    MockedClient.mockImplementationOnce(() => mockClient as unknown as Client)
+      .mockImplementationOnce(() => failingClient as unknown as Client);
 
     await clientManager.connectToServers([mockServerConfig, server2Config]);
 

@@ -20,6 +20,7 @@ export interface McpServerConfig {
   enabled?: boolean;
   timeout?: number;
   retryAttempts?: number;
+  autoReconnect?: boolean; // Whether to automatically reconnect on ping failures
 }
 
 // Input configuration for creating/updating servers (id is optional/generated)
