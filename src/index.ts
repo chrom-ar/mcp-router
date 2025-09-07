@@ -15,6 +15,7 @@ import { EventLogger } from "./services/eventLogger.js";
 import { MigrationRunner } from "./services/migrationRunner.js";
 import { runWithContext } from "./services/requestContext.js";
 import type { RouterConfig, McpServerConfig, RouterStats } from "./types/index.js";
+import { registerServer, unregisterServer, formatUptime } from "./utils/serverManagement.js";
 
 // Load environment variables
 dotenv.config();
@@ -40,6 +41,11 @@ app.use(authMiddleware(authConfig));
 const server = new McpServer({
   name: config.routerName || "mcp-router",
   version: config.routerVersion || "1.0.0",
+  capabilities: {
+    tools: {
+      listChanged: true,
+    },
+  },
 });
 
 // Initialize database and persistence services (async setup in main())
@@ -192,80 +198,37 @@ server.tool(
     autoReconnect: z.boolean().optional().default(true).describe("Whether to auto-reconnect on ping failures"),
   },
   async args => {
-    try {
-      // Don't provide an ID - let the database generate a stable one based on the name
-      const serverConfig: McpServerConfig = {
-        id: "", // Will be filled by the database
-        name: args.name,
-        url: args.url,
-        description: args.description || `MCP Server: ${args.name}`,
-        enabled: args.enabled ?? true,
-        autoReconnect: args.autoReconnect ?? true,
-      };
+    const serverConfig: McpServerConfig = {
+      id: "",
+      name: args.name,
+      url: args.url,
+      description: args.description || `MCP Server: ${args.name}`,
+      enabled: args.enabled ?? true,
+      autoReconnect: args.autoReconnect ?? true,
+    };
 
-      // Check if server with this name already exists
-      const existingIndex = config.servers.findIndex(s => s.name === args.name);
+    const result = await registerServer(serverConfig, clientManager, config, stats, server);
 
-      if (existingIndex >= 0) {
-        // Update existing server
-        config.servers[existingIndex] = serverConfig;
-        console.error(`Updated server configuration: ${args.name}`);
-      } else {
-        // Add new server
-        config.servers.push(serverConfig);
-        console.error(`Registered new server: ${args.name}`);
-      }
-
-      // Connect to the server immediately
-      await clientManager.connectToServer(serverConfig);
-
-      // This should happen here, for some reason inside the buildServerTools it's not working
-      const tools = await clientManager.buildServerTools(serverConfig);
-
-      if (tools) {
-        for (const tool of tools) {
-          (server.tool as unknown as (name: string, description: string, schema: unknown, handler: unknown) => void)(
-            tool.name,
-            tool.description,
-            tool.schema,
-            async (args: Record<string, unknown>, extra?: unknown) => {
-              return await tool.handler(args, extra);
-            },
-          );
-          // console.log(`Registered tool: ${tool.name}`);
-        }
-      }
-
-      // Update stats
-      const routerStats = clientManager.getStats();
-      stats.totalServers = routerStats.totalServers;
-      stats.connectedServers = routerStats.connectedServers;
-      stats.totalTools = routerStats.totalTools;
-
+    if (result.success) {
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify({
-              success: true,
-              message: `Successfully registered server: ${args.name}`,
-              server: serverConfig,
-              stats: {
-                totalServers: stats.totalServers,
-                connectedServers: stats.connectedServers,
-                totalTools: stats.totalTools,
-              },
+              success: result.success,
+              message: result.message,
+              server: result.server,
+              stats: result.stats,
             }, null, 2),
           },
         ],
       };
-    } catch (error: unknown) {
-      console.error(`Error registering server ${args.name}:`, error);
+    } else {
       return {
         content: [
           {
             type: "text",
-            text: `Error registering server ${args.name}: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `${result.message}: ${result.error}`,
           },
         ],
         isError: true,
@@ -281,59 +244,27 @@ server.tool(
     serverName: z.string().describe("Name of the server to unregister"),
   },
   async args => {
-    try {
-      // Find and remove server from config
-      const serverIndex = config.servers.findIndex(s => s.name === args.serverName);
+    const result = await unregisterServer(args.serverName, clientManager, config, stats);
 
-      if (serverIndex === -1) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Server not found: ${args.serverName}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      // Remove from config
-      config.servers.splice(serverIndex, 1);
-
-      // Disconnect from the server
-      await clientManager.disconnectFromServer(args.serverName);
-
-      // Update stats
-      const routerStats = clientManager.getStats();
-      stats.totalServers = routerStats.totalServers;
-      stats.connectedServers = routerStats.connectedServers;
-      stats.totalTools = routerStats.totalTools;
-
-      console.error(`Unregistered server: ${args.serverName}`);
-
+    if (result.success) {
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify({
-              success: true,
-              message: `Successfully unregistered server: ${args.serverName}`,
-              stats: {
-                totalServers: stats.totalServers,
-                connectedServers: stats.connectedServers,
-                totalTools: stats.totalTools,
-              },
+              success: result.success,
+              message: result.message,
+              stats: result.stats,
             }, null, 2),
           },
         ],
       };
-    } catch (error: unknown) {
-      console.error(`Error unregistering server ${args.serverName}:`, error);
+    } else {
       return {
         content: [
           {
             type: "text",
-            text: `Error unregistering server ${args.serverName}: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: result.message,
           },
         ],
         isError: true,
@@ -376,6 +307,7 @@ server.tool(
       };
     } catch (error: unknown) {
       console.error(`Error reconnecting to server ${args.serverName}:`, error);
+
       return {
         content: [
           {
@@ -388,19 +320,6 @@ server.tool(
     }
   },
 );
-
-// Utility function to format uptime
-const formatUptime = (ms: number): string => {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (days > 0) {return `${days}d ${hours % 24}h ${minutes % 60}m`;}
-  if (hours > 0) {return `${hours}h ${minutes % 60}m`;}
-  if (minutes > 0) {return `${minutes}m ${seconds % 60}s`;}
-  return `${seconds}s`;
-};
 
 // MCP endpoint - handles all HTTP methods for stateless operation
 app.post("/mcp", async (req: Request, res: Response) => {
@@ -418,7 +337,7 @@ app.post("/mcp", async (req: Request, res: Response) => {
 
     await runWithContext(context, async () => {
       const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
+        sessionIdGenerator: undefined, // Stateless mode
       });
 
       res.on("close", () => {
@@ -509,6 +428,88 @@ app.get("/config", (req: Request, res: Response) => {
       // Don't expose sensitive information
     })),
   });
+});
+
+// Server registration endpoint
+app.post("/register", async (req: Request, res: Response) => {
+  try {
+    const { name, url, description, enabled = true, autoReconnect = true } = req.body;
+
+    if (!name || !url) {
+      return res.status(400).json({
+        error: "Missing required fields: name and url"
+      });
+    }
+
+    // Create server configuration
+    const serverConfig: McpServerConfig = {
+      id: "",
+      name: name,
+      url: url,
+      description: description || `MCP Server: ${name}`,
+      enabled: enabled,
+      autoReconnect: autoReconnect,
+    };
+
+    const result = await registerServer(serverConfig, clientManager, config, stats, server);
+
+    if (result.success) {
+      res.json({
+        success: result.success,
+        message: result.message,
+        server: result.server,
+        stats: result.stats,
+      });
+    } else {
+      if (result.error?.includes("already exists")) {
+        res.status(409).json({
+          error: result.error,
+        });
+      } else {
+        res.status(500).json({
+          error: result.error,
+        });
+      }
+    }
+  } catch (error: unknown) {
+    console.error(`Error registering server:`, error);
+
+    res.status(500).json({
+      error: `Error registering server: ${error instanceof Error ? error.message : "Unknown error"}`
+    });
+  }
+});
+
+// Server unregistration endpoint
+app.delete("/register/:serverName", async (req: Request, res: Response) => {
+  try {
+    const { serverName } = req.params;
+    const result = await unregisterServer(serverName, clientManager, config, stats);
+
+    if (result.success) {
+      res.json({
+        success: result.success,
+        message: result.message,
+        stats: result.stats,
+      });
+    } else {
+      if (result.error === "Server not found") {
+        res.status(404).json({
+          error: `Server '${serverName}' not found`,
+        });
+      } else {
+        res.status(500).json({
+          error: result.error,
+        });
+      }
+    }
+  } catch (error: unknown) {
+    console.error(`Error unregistering server ${req.params.serverName}:`, error);
+
+    res.status(500).json({
+      error: `Error unregistering server: ${error instanceof Error ? error.message : "Unknown error"}`
+    });
+  }
 });
 
 // Main function to start the router

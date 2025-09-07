@@ -184,6 +184,10 @@ export class ClientManager {
         tools: [],
       });
     }
+
+    if (!this.pingInterval && this.connections.size > 0) {
+      this.startPingInterval();
+    }
   }
 
   /**
@@ -483,7 +487,9 @@ export class ClientManager {
     const connection = this.connections.get(serverName);
 
     if (!connection) {
-      throw new Error(`Server ${serverName} not found`);
+      console.log(`Server ${serverName} not found - may already be disconnected`);
+
+      return;
     }
 
     if (this.eventLogger && connection.config.id) {
@@ -523,6 +529,8 @@ export class ClientManager {
     // Clear existing interval if any
     this.stopPingInterval();
 
+    console.log(`Starting ping interval (every ${this.pingIntervalMs / 1000} seconds)`);
+
     this.pingInterval = setInterval(async () => {
       await this.pingAllServers();
     }, this.pingIntervalMs);
@@ -539,11 +547,21 @@ export class ClientManager {
   }
 
   /**
-   * Ping all connected servers
+   * Ping all connected servers and attempt to reconnect disconnected ones
    */
   private async pingAllServers(): Promise<void> {
     const pingPromises = Array.from(this.connections.entries()).map(async ([serverId, connection]) => {
       if (!connection.status.connected) {
+        if (connection.config.autoReconnect !== false) {
+          console.log(`Attempting to reconnect to disconnected server: ${connection.config.name}`);
+
+          try {
+            await this.reconnectToServer(serverId);
+            console.log(`Successfully reconnected to ${connection.config.name}`);
+          } catch (error) {
+            console.log(`Failed to reconnect to ${connection.config.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        }
         return;
       }
 
@@ -569,6 +587,16 @@ export class ClientManager {
         if (connection.consecutivePingFailures >= this.maxConsecutivePingFailures) {
           connection.status.connected = false;
           connection.status.lastError = `Server not responding to ping (${connection.consecutivePingFailures} consecutive failures)`;
+
+          console.log(`Removing tools for disconnected server: ${connection.config.name}`);
+
+          for (const [toolName, route] of this.toolRoutes.entries()) {
+            if (route.serverId === serverId) {
+              this.toolRoutes.delete(toolName);
+            }
+          }
+
+          connection.tools = [];
 
           // Log the disconnection
           if (this.eventLogger && connection.config.id) {
