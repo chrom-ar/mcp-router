@@ -557,8 +557,15 @@ export class ClientManager {
 
           try {
             await this.reconnectToServer(serverId);
-            console.log(`Successfully reconnected to ${connection.config.name}`);
-          } catch (error) {
+
+            const newConnection = this.connections.get(serverId);
+
+            if (newConnection && newConnection.status.connected) {
+              console.log(`Successfully reconnected to ${connection.config.name}`);
+            } else {
+              console.log(`Failed to reconnect to ${connection.config.name}: Server is still not connected`);
+            }
+          } catch (error: unknown) {
             console.log(`Failed to reconnect to ${connection.config.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
           }
         }
