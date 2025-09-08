@@ -476,13 +476,20 @@ app.post("/register", async (req: Request, res: Response) => {
         stats: result.stats,
       });
     } else {
-      if (result.error?.includes("already exists")) {
+      if (result.error?.includes("already exists") || result.error === "Name/URL conflict") {
         res.status(409).json({
           error: result.error,
+          message: result.message,
+        });
+      } else if (result.error?.startsWith("Invalid")) {
+        res.status(400).json({
+          error: result.error,
+          message: result.message,
         });
       } else {
         res.status(500).json({
           error: result.error,
+          message: result.message,
         });
       }
     }

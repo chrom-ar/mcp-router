@@ -21,9 +21,62 @@ export const registerServer = async (
   error?: string;
 }> => {
   try {
+    // Basic input validation
+    if (!serverConfig.name || typeof serverConfig.name !== 'string' || serverConfig.name.trim() === '') {
+      return {
+        success: false,
+        message: "Server name is required and must be a non-empty string",
+        error: "Invalid server name"
+      };
+    }
+
+    if (!serverConfig.url || typeof serverConfig.url !== 'string' || serverConfig.url.trim() === '') {
+      return {
+        success: false,
+        message: "Server URL is required and must be a non-empty string",
+        error: "Invalid server URL"
+      };
+    }
+
+    // Validate server name format (alphanumeric, hyphens, underscores only)
+    if (!/^[a-zA-Z0-9_-]+$/.test(serverConfig.name.trim())) {
+      return {
+        success: false,
+        message: "Server name can only contain letters, numbers, hyphens, and underscores",
+        error: "Invalid server name format"
+      };
+    }
+
+    // Validate URL format
+    try {
+      new URL(serverConfig.url.trim());
+    } catch {
+      return {
+        success: false,
+        message: "Server URL must be a valid URL",
+        error: "Invalid URL format"
+      };
+    }
+
+    // Normalize inputs
+    serverConfig.name = serverConfig.name.trim();
+    serverConfig.url = serverConfig.url.trim();
     const existingServers = clientManager.getServerStatuses();
     const existingIndex = config.servers.findIndex(s => s.name === serverConfig.name);
-    const isUpdate = existingServers.find(s => s.name === serverConfig.name) !== undefined;
+    const existingServer = existingServers.find(s => s.name === serverConfig.name);
+    const isUpdate = existingServer !== undefined;
+
+    // Validate server name and URL consistency
+    if (isUpdate && existingIndex >= 0) {
+      const currentConfig = config.servers[existingIndex];
+      if (currentConfig.url !== serverConfig.url) {
+        return {
+          success: false,
+          message: `Server name "${serverConfig.name}" is already registered with URL "${currentConfig.url}". Cannot register with different URL "${serverConfig.url}".`,
+          error: "Name/URL conflict"
+        };
+      }
+    }
 
     if (existingIndex >= 0) {
       config.servers[existingIndex] = serverConfig;

@@ -117,8 +117,7 @@ export class ClientManager {
         version: "1.0.0",
       });
 
-      // Use config.id if available, otherwise use config.name as the key
-      const serverId = config.id || config.name;
+      const serverId = config.name;
 
       client.onerror = (error: unknown) => {
         // console.log(`Client error for ${config.name}:`, error);
@@ -194,7 +193,7 @@ export class ClientManager {
    * Load tools from a connected server and store them internally
    */
   private async loadServerTools(config: McpServerConfig): Promise<void> {
-    const serverId = config.id || config.name;
+    const serverId = config.name;
     const connection = this.connections.get(serverId);
 
     if (!connection || !connection.client || !connection.status.connected) {
@@ -257,6 +256,7 @@ export class ClientManager {
       }
     } catch (error: unknown) {
       console.error(`Failed to load tools from ${config.name}:`, error);
+
       connection.status.lastError = error instanceof Error ? error.message : "Failed to load tools";
     }
   }
@@ -265,7 +265,7 @@ export class ClientManager {
    * Load tools from a connected server (public method for external use)
    */
   async buildServerTools(config: McpServerConfig): Promise<AggregatedTool[] | undefined> {
-    const serverId = config.id || config.name;
+    const serverId = config.name;
     const connection = this.connections.get(serverId);
 
     if (!connection || !connection.client || !connection.status.connected) {
