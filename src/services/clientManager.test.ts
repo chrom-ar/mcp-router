@@ -181,7 +181,7 @@ describe("ClientManager", () => {
     await clientManager.connectToServers([mockServerConfig]);
 
     await expect(clientManager.callTool("unknown:tool", {}))
-      .rejects.toThrow("Tool not found: unknown:tool");
+      .rejects.toThrow("Server unknown not found");
   });
 
   test("should throw error when calling tool on disconnected server", async () => {
@@ -196,6 +196,9 @@ describe("ClientManager", () => {
     if (connection) {
       connection.status.connected = false;
     }
+
+    // Make the reconnection attempt fail by making connect throw an error
+    mockClient.connect.mockRejectedValueOnce(new Error("Connection failed"));
 
     await expect(clientManager.callTool("test-server:test-tool-1", {}))
       .rejects.toThrow("Server test-server is not connected");

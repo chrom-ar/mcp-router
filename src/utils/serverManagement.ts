@@ -164,7 +164,17 @@ export const registerServer = async (
     }
 
     await clientManager.connectToServer(serverConfig);
-    await registerToolsWithMcpServer(serverConfig, clientManager, server);
+
+    // Only register tools if the server is actually connected
+    const serverStatuses = clientManager.getServerStatuses();
+    const serverStatus = serverStatuses.find(s => s.name === serverConfig.name);
+
+    if (serverStatus && serverStatus.connected) {
+      await registerToolsWithMcpServer(serverConfig, clientManager, server);
+      console.log(`Registered tools for connected server: ${serverConfig.name}`);
+    } else {
+      console.log(`Server ${serverConfig.name} is not connected, skipping tool registration`);
+    }
 
     const routerStats = clientManager.getStats();
     stats.totalServers = routerStats.totalServers;

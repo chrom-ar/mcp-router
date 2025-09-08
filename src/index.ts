@@ -589,28 +589,13 @@ const main = async () => {
           mcpServer: server,
         });
 
+        // Start sync service which will handle loading all servers and registering tools
         await syncService.start();
 
-        // Load persisted servers and refresh their tools
-        await clientManager.loadPersistedServers();
-
+        // The sync service now handles loading and registering all servers
         const loadedServers = clientManager.getServerStatuses();
 
-        if (loadedServers.length > 0) {
-          console.log(`Refreshing tools for ${loadedServers.length} persisted servers...`);
-
-          for (const serverStatus of loadedServers) {
-            if (serverStatus.connected) {
-              const serverConfig = config.servers.find(s => s.name === serverStatus.name);
-
-              if (serverConfig) {
-                console.log(`  Refreshing tools for server: ${serverConfig.name}`);
-
-                await registerServer(serverConfig, clientManager, config, stats, server, syncService);
-              }
-            }
-          }
-        }
+        console.log(`Total servers loaded: ${loadedServers.length}, Connected: ${loadedServers.filter(s => s.connected).length}`);
       } catch (dbError: unknown) {
         console.error("Failed to initialize database:", dbError);
         console.log("Continuing without persistence...");

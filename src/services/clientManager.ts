@@ -289,14 +289,50 @@ export class ClientManager {
 
     const serverName = toolName.substring(0, separatorIndex);
     const actualToolName = toolName.substring(separatorIndex + this.toolNameSeparator.length);
-    const connection = this.connections.get(serverName);
+    let connection = this.connections.get(serverName);
 
     if (!connection) {
-      throw new Error(`Tool not found: ${toolName}`);
+      // Try to get server config from repository and connect
+      if (this.serverRepository) {
+        try {
+          const serverConfig = await this.serverRepository.getByName(serverName);
+
+          if (serverConfig && serverConfig.enabled) {
+            console.log(`Server ${serverName} not connected locally, attempting to connect...`);
+
+            await this.connectToServer({
+              id: serverConfig.id,
+              name: serverConfig.name,
+              url: serverConfig.url,
+              description: serverConfig.description || undefined,
+              enabled: serverConfig.enabled,
+            });
+            connection = this.connections.get(serverName);
+          }
+        } catch (error: unknown) {
+          console.error(`Failed to connect to server ${serverName}:`, error);
+        }
+      }
+
+      if (!connection) {
+        throw new Error(`Server ${serverName} not found`);
+      }
     }
 
     if (!connection.status.connected) {
-      throw new Error(`Server ${serverName} is not connected`);
+      // Try to reconnect
+      try {
+        console.log(`Server ${serverName} disconnected, attempting to reconnect...`);
+
+        await this.reconnectToServer(serverName);
+        connection = this.connections.get(serverName);
+
+        if (!connection || !connection.status.connected) {
+          throw new Error(`Server ${serverName} is not connected and reconnection failed`);
+        }
+      } catch (error: unknown) {
+        throw new Error(`Server ${serverName} is not connected`);
+      }
     }
 
     const startTime = Date.now();
