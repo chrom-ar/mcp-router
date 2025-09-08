@@ -569,8 +569,26 @@ const main = async () => {
 
         console.log("Database initialized successfully");
 
-        // Load persisted servers
+        // Load persisted servers and refresh their tools
         await clientManager.loadPersistedServers();
+
+        const loadedServers = clientManager.getServerStatuses();
+
+        if (loadedServers.length > 0) {
+          console.log(`Refreshing tools for ${loadedServers.length} persisted servers...`);
+
+          for (const serverStatus of loadedServers) {
+            if (serverStatus.connected) {
+              const serverConfig = config.servers.find(s => s.name === serverStatus.name);
+
+              if (serverConfig) {
+                console.log(`  Refreshing tools for server: ${serverConfig.name}`);
+
+                await registerServer(serverConfig, clientManager, config, stats, server);
+              }
+            }
+          }
+        }
       } catch (dbError: unknown) {
         console.error("Failed to initialize database:", dbError);
         console.log("Continuing without persistence...");
