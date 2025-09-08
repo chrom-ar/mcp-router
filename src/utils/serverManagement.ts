@@ -6,7 +6,6 @@ import type { McpServerConfig, RouterConfig, RouterStats } from "../types/index.
 import { jsonSchemaToZodShape, type JsonSchema } from "./schemaTransform.js";
 
 const registeredTools = new Set<string>();
-const toolToServerMap = new Map<string, string>();
 
 export const unregisterToolsFromMcpServer = (
   serverName: string,
@@ -22,7 +21,6 @@ export const unregisterToolsFromMcpServer = (
 
   toolsToRemove.forEach(toolName => {
     registeredTools.delete(toolName);
-    toolToServerMap.delete(toolName);
     console.log(`  Removed tool: ${toolName}`);
   });
 
@@ -55,26 +53,14 @@ export const registerToolsWithMcpServer = async (
         tool.description || "Tool from registered MCP server",
         zodShape,
         async (args: Record<string, unknown>, extra?: unknown) => {
-          const serverName = toolToServerMap.get(tool.name);
-
-          if (!serverName || !registeredTools.has(tool.name)) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: `Error: Server for tool ${tool.name} has been unregistered`,
-                },
-              ],
-              isError: true,
-            };
-          }
-
+          // In multi-pod setups, we can't rely on local state
+          // The tool handler is already bound to the correct server
+          // If the tool exists, it means it's registered and available
           return await tool.handler(args, extra);
         },
       );
 
       registeredTools.add(tool.name);
-      toolToServerMap.set(tool.name, serverConfig.name);
     }
   }
 };
