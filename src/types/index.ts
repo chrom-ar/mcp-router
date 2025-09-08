@@ -69,14 +69,6 @@ export interface ServerStatus {
   toolsCount: number;
 }
 
-// Tool call routing information
-export interface ToolRoute {
-  serverId: string;
-  serverName: string;
-  originalToolName: string;
-  serverUrl: string;
-}
-
 // Router stats
 export interface RouterStats {
   totalServers: number;
@@ -87,9 +79,3 @@ export interface RouterStats {
   errorCount: number;
 }
 
-// Tool call request with routing context
-export interface RoutedToolCall {
-  toolName: string;
-  arguments: Record<string, unknown>;
-  route: ToolRoute;
-}

@@ -150,10 +150,10 @@ describe("ClientManager", () => {
     const allTools = clientManager.getAllTools();
     expect(allTools).toHaveLength(2);
 
-    expect(allTools[0].name).toBe("test-server-id:test-tool-1");
+    expect(allTools[0].name).toBe("test-server:test-tool-1");
     expect(allTools[0].description).toContain("Test tool 1");
 
-    expect(allTools[1].name).toBe("test-server-id:test-tool-2");
+    expect(allTools[1].name).toBe("test-server:test-tool-2");
     expect(allTools[1].description).toContain("Test tool 2");
   });
 
@@ -162,13 +162,13 @@ describe("ClientManager", () => {
     await customManager.connectToServers([mockServerConfig]);
 
     const allTools = customManager.getAllTools();
-    expect(allTools[0].name).toBe("test-server-id|test-tool-1");
+    expect(allTools[0].name).toBe("test-server|test-tool-1");
   });
 
   test("should call tools on the correct server", async () => {
     await clientManager.connectToServers([mockServerConfig]);
 
-    const result = await clientManager.callTool("test-server-id:test-tool-1", { param1: "value" });
+    const result = await clientManager.callTool("test-server:test-tool-1", { param1: "value" });
 
     expect(mockClient.callTool).toHaveBeenCalledWith({
       name: "test-tool-1",
@@ -191,14 +191,14 @@ describe("ClientManager", () => {
     // Simulate disconnection
     const statuses = clientManager.getServerStatuses();
     // Access private property for testing
-    const connection = (clientManager as unknown as { connections: Map<string, { status: { connected: boolean } }> }).connections.get("test-server-id");
+    const connection = (clientManager as unknown as { connections: Map<string, { status: { connected: boolean } }> }).connections.get("test-server");
 
     if (connection) {
       connection.status.connected = false;
     }
 
-    await expect(clientManager.callTool("test-server-id:test-tool-1", {}))
-      .rejects.toThrow("Server test-server-id is not connected");
+    await expect(clientManager.callTool("test-server:test-tool-1", {}))
+      .rejects.toThrow("Server test-server is not connected");
   });
 
   test("should get server statuses", async () => {
@@ -219,7 +219,6 @@ describe("ClientManager", () => {
     expect(stats.totalServers).toBe(1);
     expect(stats.connectedServers).toBe(1);
     expect(stats.totalTools).toBe(2);
-    expect(stats.toolRoutes).toBe(2);
   });
 
   test("should handle multiple servers", async () => {
@@ -262,13 +261,13 @@ describe("ClientManager", () => {
     expect(stats.totalTools).toBe(3);
 
     // Test calling tools from different servers
-    const result1 = await clientManager.callTool("test-server-id:test-tool-1", {});
+    const result1 = await clientManager.callTool("test-server:test-tool-1", {});
     expect(mockClient.callTool).toHaveBeenCalledWith({
       name: "test-tool-1",
       arguments: {},
     });
 
-    const result2 = await clientManager.callTool("test-server-2-id:tool-a", {});
+    const result2 = await clientManager.callTool("test-server-2:tool-a", {});
     expect(mockClient2.callTool).toHaveBeenCalledWith({
       name: "tool-a",
       arguments: {},
@@ -289,13 +288,13 @@ describe("ClientManager", () => {
 
     MockedClient.mockImplementationOnce(() => newMockClient as unknown as Client);
 
-    await clientManager.reconnectToServer("test-server-id");
+    await clientManager.reconnectToServer("test-server");
 
     expect(mockTransport.close).toHaveBeenCalled();
     expect(newMockClient.connect).toHaveBeenCalled();
 
     // Old routes should be cleared and new ones created
-    const result = await clientManager.callTool("test-server-id:test-tool-1", {});
+    const result = await clientManager.callTool("test-server:test-tool-1", {});
     expect(newMockClient.callTool).toHaveBeenCalled();
   });
 
@@ -360,7 +359,7 @@ describe("ClientManager", () => {
 
     await clientManager.connectToServers([mockServerConfig]);
 
-    const result = await clientManager.pingServer("test-server-id");
+    const result = await clientManager.pingServer("test-server");
 
     expect(result).toBe(true);
     expect(mockClient.ping).toHaveBeenCalled();
@@ -371,7 +370,7 @@ describe("ClientManager", () => {
 
     await clientManager.connectToServers([mockServerConfig]);
 
-    const result = await clientManager.pingServer("test-server-id");
+    const result = await clientManager.pingServer("test-server");
 
     expect(result).toBe(false);
     expect(mockClient.ping).toHaveBeenCalled();
@@ -381,12 +380,12 @@ describe("ClientManager", () => {
     await clientManager.connectToServers([mockServerConfig]);
 
     // Mark server as disconnected
-    const connection = (clientManager as unknown as { connections: Map<string, { status: { connected: boolean } }> }).connections.get("test-server-id");
+    const connection = (clientManager as unknown as { connections: Map<string, { status: { connected: boolean } }> }).connections.get("test-server");
     if (connection) {
       connection.status.connected = false;
     }
 
-    const result = await clientManager.pingServer("test-server-id");
+    const result = await clientManager.pingServer("test-server");
 
     expect(result).toBe(false);
   });
@@ -488,7 +487,7 @@ describe("ClientManager", () => {
 
     // Tools should use the same prefixed names
     const tools = clientManager.getAllTools();
-    expect(tools[0].name).toBe("test-server-id:test-tool-1");
+    expect(tools[0].name).toBe("test-server:test-tool-1");
   });
 
   test("should only return tools from connected servers", async () => {

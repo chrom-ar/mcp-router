@@ -202,7 +202,7 @@ server.tool(
   "router:register-server",
   "Register a new MCP server with the router",
   registerServerSchema.shape as Record<string, z.ZodTypeAny>,
-  async (args) => {
+  async args => {
     const typedArgs = args as { name: string; url: string; description?: string; enabled?: boolean; autoReconnect?: boolean };
     const serverConfig: McpServerConfig = {
       id: "",
@@ -252,7 +252,7 @@ server.tool(
   "router:unregister-server",
   "Unregister an MCP server from the router",
   unregisterServerSchema.shape as Record<string, z.ZodTypeAny>,
-  async (args) => {
+  async args => {
     const typedArgs = args as { serverName: string };
     const result = await unregisterServer(typedArgs.serverName, clientManager, config, stats);
 
@@ -293,7 +293,7 @@ server.tool(
   "router:reconnect-server",
   "Reconnect to a specific MCP server",
   reconnectServerSchema.shape as Record<string, z.ZodTypeAny>,
-  async (args) => {
+  async args => {
     const typedArgs = args as { serverName: string };
     try {
       await clientManager.reconnectToServer(typedArgs.serverName);
@@ -452,7 +452,7 @@ app.post("/register", async (req: Request, res: Response) => {
 
     if (!name || !url) {
       return res.status(400).json({
-        error: "Missing required fields: name and url"
+        error: "Missing required fields: name and url",
       });
     }
 
@@ -494,10 +494,10 @@ app.post("/register", async (req: Request, res: Response) => {
       }
     }
   } catch (error: unknown) {
-    console.error(`Error registering server:`, error);
+    console.error("Error registering server:", error);
 
     res.status(500).json({
-      error: `Error registering server: ${error instanceof Error ? error.message : "Unknown error"}`
+      error: `Error registering server: ${error instanceof Error ? error.message : "Unknown error"}`,
     });
   }
 });
@@ -529,7 +529,7 @@ app.delete("/register/:serverName", async (req: Request, res: Response) => {
     console.error(`Error unregistering server ${req.params.serverName}:`, error);
 
     res.status(500).json({
-      error: `Error unregistering server: ${error instanceof Error ? error.message : "Unknown error"}`
+      error: `Error unregistering server: ${error instanceof Error ? error.message : "Unknown error"}`,
     });
   }
 });

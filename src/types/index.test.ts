@@ -11,9 +11,7 @@ import type {
   RouterConfig,
   AggregatedTool,
   ServerStatus,
-  ToolRoute,
   RouterStats,
-  RoutedToolCall,
 } from "./index.js";
 
 describe("Types", () => {
@@ -161,20 +159,6 @@ describe("Types", () => {
     expect(minimalStatus.toolsCount).toBe(0);
     expect(minimalStatus.lastConnected).toBeUndefined();
     expect(minimalStatus.lastError).toBeUndefined();
-  });
-
-  test("ToolRoute interface should be properly typed", () => {
-    const route: ToolRoute = {
-      serverId: "server1",
-      serverName: "server1",
-      originalToolName: "test-tool",
-      serverUrl: "http://localhost:3000/mcp",
-    };
-
-    expect(route.serverId).toBe("server1");
-    expect(route.serverName).toBe("server1");
-    expect(route.originalToolName).toBe("test-tool");
-    expect(route.serverUrl).toBe("http://localhost:3000/mcp");
   });
 
   test("RouterStats interface should be properly typed", () => {

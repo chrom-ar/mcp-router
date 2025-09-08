@@ -16,6 +16,7 @@ describe("MCP Router Server", () => {
         ROUTER_PORT: "4001", // Use port 4001 for testing
         ROUTER_NAME: "mcp-router-test",
         ROUTER_VERSION: "1.0.0-test",
+        AUTH_ENABLED: "false", // Disable authentication for tests
       },
       stdio: "pipe",
     });

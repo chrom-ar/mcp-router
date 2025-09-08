@@ -12,29 +12,29 @@ export const registerServer = async (
   clientManager: ClientManager,
   config: RouterConfig,
   stats: RouterStats,
-  server: McpServer
+  server: McpServer,
 ): Promise<{
   success: boolean;
   message: string;
   server?: McpServerConfig;
-  stats?: any;
+  stats?: unknown;
   error?: string;
 }> => {
   try {
     // Basic input validation
-    if (!serverConfig.name || typeof serverConfig.name !== 'string' || serverConfig.name.trim() === '') {
+    if (!serverConfig.name || typeof serverConfig.name !== "string" || serverConfig.name.trim() === "") {
       return {
         success: false,
         message: "Server name is required and must be a non-empty string",
-        error: "Invalid server name"
+        error: "Invalid server name",
       };
     }
 
-    if (!serverConfig.url || typeof serverConfig.url !== 'string' || serverConfig.url.trim() === '') {
+    if (!serverConfig.url || typeof serverConfig.url !== "string" || serverConfig.url.trim() === "") {
       return {
         success: false,
         message: "Server URL is required and must be a non-empty string",
-        error: "Invalid server URL"
+        error: "Invalid server URL",
       };
     }
 
@@ -43,7 +43,7 @@ export const registerServer = async (
       return {
         success: false,
         message: "Server name can only contain letters, numbers, hyphens, and underscores",
-        error: "Invalid server name format"
+        error: "Invalid server name format",
       };
     }
 
@@ -54,7 +54,7 @@ export const registerServer = async (
       return {
         success: false,
         message: "Server URL must be a valid URL",
-        error: "Invalid URL format"
+        error: "Invalid URL format",
       };
     }
 
@@ -73,7 +73,7 @@ export const registerServer = async (
         return {
           success: false,
           message: `Server name "${serverConfig.name}" is already registered with URL "${currentConfig.url}". Cannot register with different URL "${serverConfig.url}".`,
-          error: "Name/URL conflict"
+          error: "Name/URL conflict",
         };
       }
     }
@@ -86,7 +86,7 @@ export const registerServer = async (
 
     const oldToolPrefix = `${serverConfig.name}:`;
     const toolsToRemove = Array.from(registeredTools).filter(toolName =>
-      toolName.startsWith(oldToolPrefix)
+      toolName.startsWith(oldToolPrefix),
     );
 
     console.log(`Clearing ${toolsToRemove.length} existing tools for server ${serverConfig.name}`);
@@ -135,7 +135,7 @@ export const registerServer = async (
             }
 
             return await tool.handler(args, extra);
-          }
+          },
         );
 
         registeredTools.add(tool.name);
@@ -177,11 +177,11 @@ export const unregisterServer = async (
   serverName: string,
   clientManager: ClientManager,
   config: RouterConfig,
-  stats: RouterStats
+  stats: RouterStats,
 ): Promise<{
   success: boolean;
   message: string;
-  stats?: any;
+  stats?: unknown;
   error?: string;
 }> => {
   try {
@@ -198,7 +198,7 @@ export const unregisterServer = async (
 
     const toolPrefix = `${serverName}:`;
     const toolsToRemove = Array.from(registeredTools).filter(toolName =>
-      toolName.startsWith(toolPrefix)
+      toolName.startsWith(toolPrefix),
     );
 
     console.log(`Removing ${toolsToRemove.length} tools from server ${serverName}`);
@@ -256,9 +256,9 @@ export const formatUptime = (ms: number): string => {
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
 
-  if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
-  if (hours > 0) return `${hours}h ${minutes % 60}m`;
-  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+  if (days > 0) {return `${days}d ${hours % 24}h ${minutes % 60}m`;}
+  if (hours > 0) {return `${hours}h ${minutes % 60}m`;}
+  if (minutes > 0) {return `${minutes}m ${seconds % 60}s`;}
 
   return `${seconds}s`;
 };

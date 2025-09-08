@@ -14,7 +14,6 @@ import type {
   ServerStatus,
   ToolHandlerArgs,
   ToolHandlerResult,
-  ToolRoute,
 } from "../types/index.js";
 
 interface ClientConnection {
@@ -29,7 +28,6 @@ interface ClientConnection {
 
 export class ClientManager {
   private connections = new Map<string, ClientConnection>();
-  private toolRoutes = new Map<string, ToolRoute>();
   private toolNameSeparator: string;
   private serverRepository?: ServerRepository;
   private eventLogger?: EventLogger;
@@ -206,16 +204,7 @@ export class ClientManager {
       if (toolsResult && toolsResult.tools) {
         const aggregatedTools: AggregatedTool[] = toolsResult.tools.map((tool: { name: string; description?: string; inputSchema: unknown }) => {
           const aggregatedName = `${serverId}${this.toolNameSeparator}${tool.name}`;
-
           const schema: ZodRawShape = {};
-
-          // Store the tool route for efficient lookup
-          this.toolRoutes.set(aggregatedName, {
-            serverId: serverId,
-            serverName: config.name,
-            originalToolName: tool.name,
-            serverUrl: config.url,
-          });
 
           return {
             name: aggregatedName,
@@ -223,10 +212,14 @@ export class ClientManager {
             schema,
             inputSchema: tool.inputSchema,
             handler: async (args: ToolHandlerArgs): Promise<ToolHandlerResult> => {
-              try {
-                // console.log(`Routing ${config.name}:${tool.name} with args: ${JSON.stringify(args)}`);
+              // Get fresh connection in case it was reconnected
+              const currentConnection = this.connections.get(serverId);
+              if (!currentConnection || !currentConnection.status.connected) {
+                throw new Error(`Server ${serverId} is not connected`);
+              }
 
-                const result = await connection.client.callTool({
+              try {
+                const result = await currentConnection.client.callTool({
                   name: tool.name,
                   arguments: args || {},
                 });
@@ -256,74 +249,17 @@ export class ClientManager {
       }
     } catch (error: unknown) {
       console.error(`Failed to load tools from ${config.name}:`, error);
-
       connection.status.lastError = error instanceof Error ? error.message : "Failed to load tools";
     }
   }
 
   /**
-   * Load tools from a connected server (public method for external use)
+   * Get tools from a specific server (public method for external use)
    */
   async buildServerTools(config: McpServerConfig): Promise<AggregatedTool[] | undefined> {
-    const serverId = config.name;
-    const connection = this.connections.get(serverId);
-
-    if (!connection || !connection.client || !connection.status.connected) {
-      return;
-    }
-
-    try {
-      const toolsResult = await connection.client.listTools();
-      if (toolsResult && toolsResult.tools) {
-        const aggregatedTools: AggregatedTool[] = toolsResult.tools.map((tool: { name: string; description?: string; inputSchema: unknown }) => {
-          const aggregatedName = `${serverId}${this.toolNameSeparator}${tool.name}`;
-          const schema: ZodRawShape = {};
-
-          return {
-            name: aggregatedName,
-            description: `[${config.name}] ${tool.description}`,
-            schema,
-            inputSchema: tool.inputSchema,
-            handler: async (args: ToolHandlerArgs): Promise<ToolHandlerResult> => {
-              try {
-                // stats.requestCount++;
-                // console.log(`Routing ${config.name}:${tool.name} with args: ${JSON.stringify(args)}`);
-
-                const result = await connection.client.callTool({
-                  name: tool.name,
-                  arguments: args || {},
-                });
-                // Ensure content is always present
-                return {
-                  ...result,
-                  content: result.content || [],
-                } as ToolHandlerResult;
-              } catch (error: unknown) {
-                // stats.errorCount++;
-                console.error(`Error calling tool ${tool.name}:`, error);
-                return {
-                  content: [
-                    {
-                      type: "text",
-                      text: `Error calling tool ${tool.name}: ${error instanceof Error ? error.message : "Unknown error"}`,
-                    },
-                  ],
-                  isError: true,
-                };
-              }
-            },
-          };
-        });
-
-        connection.tools = aggregatedTools;
-        connection.status.toolsCount = aggregatedTools.length;
-
-        return aggregatedTools;
-      }
-    } catch (error: unknown) {
-      console.error(`Failed to load tools from ${config.name}:`, error);
-      connection.status.lastError = error instanceof Error ? error.message : "Failed to load tools";
-    }
+    await this.loadServerTools(config);
+    const connection = this.connections.get(config.name);
+    return connection?.tools;
   }
 
   /**
@@ -447,20 +383,8 @@ export class ClientManager {
     }
 
     this.connections.delete(serverName);
-    this.clearServerRoutes(serverName);
 
     await this.connectToServer(connection.config);
-  }
-
-  /**
-   * Clear tool routes for a specific server
-   */
-  private clearServerRoutes(serverName: string): void {
-    for (const [toolName, route] of this.toolRoutes.entries()) {
-      if (route.serverId === serverName) {
-        this.toolRoutes.delete(toolName);
-      }
-    }
   }
 
   /**
@@ -492,7 +416,6 @@ export class ClientManager {
     }
 
     this.connections.delete(serverName);
-    this.clearServerRoutes(serverName);
 
     if (this.serverRepository) {
       try {
@@ -549,7 +472,7 @@ export class ClientManager {
               console.log(`Failed to reconnect to ${connection.config.name}: Server is still not connected`);
             }
           } catch (error: unknown) {
-            console.log(`Failed to reconnect to ${connection.config.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            console.log(`Failed to reconnect to ${connection.config.name}: ${error instanceof Error ? error.message : "Unknown error"}`);
           }
         }
         return;
@@ -578,14 +501,7 @@ export class ClientManager {
           connection.status.connected = false;
           connection.status.lastError = `Server not responding to ping (${connection.consecutivePingFailures} consecutive failures)`;
 
-          console.log(`Removing tools for disconnected server: ${connection.config.name}`);
-
-          for (const [toolName, route] of this.toolRoutes.entries()) {
-            if (route.serverId === serverId) {
-              this.toolRoutes.delete(toolName);
-            }
-          }
-
+          console.log(`Clearing tools for disconnected server: ${connection.config.name}`);
           connection.tools = [];
 
           // Log the disconnection
@@ -658,7 +574,6 @@ export class ClientManager {
 
     await Promise.allSettled(disconnectPromises);
     this.connections.clear();
-    this.toolRoutes.clear();
   }
 
   /**
@@ -673,7 +588,6 @@ export class ClientManager {
       totalServers: this.connections.size,
       connectedServers,
       totalTools: this.getAllTools().length,
-      toolRoutes: this.toolRoutes.size,
     };
   }
 }
