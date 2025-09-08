@@ -14,18 +14,18 @@ export const up = async (database: Database): Promise<void> => {
   `);
 
   await database.query(`
-    CREATE INDEX IF NOT EXISTS idx_sync_events_unprocessed 
-    ON sync_events(created_at) 
+    CREATE INDEX IF NOT EXISTS idx_sync_events_unprocessed
+    ON sync_events(created_at)
     WHERE processed_at IS NULL
   `);
 
   await database.query(`
-    CREATE INDEX IF NOT EXISTS idx_sync_events_created_at 
+    CREATE INDEX IF NOT EXISTS idx_sync_events_created_at
     ON sync_events(created_at)
   `);
 
   await database.query(`
-    ALTER TABLE servers 
+    ALTER TABLE servers
     ADD COLUMN IF NOT EXISTS managed_by VARCHAR(255)
   `);
 };

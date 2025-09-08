@@ -35,6 +35,8 @@ export class SyncService {
   private cleanupIntervalMs: number;
   private cleanupInterval?: NodeJS.Timeout;
   private eventRetentionHours: number;
+  private dbSyncInterval?: NodeJS.Timeout;
+  private dbSyncIntervalMs: number;
 
   constructor(
     database: Database,
@@ -45,6 +47,7 @@ export class SyncService {
       cleanupIntervalMs?: number;
       eventRetentionHours?: number;
       mcpServer?: McpServer;
+      dbSyncIntervalMs?: number;
     },
   ) {
     this.instanceId = options?.instanceId || `router-${uuidv4()}`;
@@ -54,6 +57,7 @@ export class SyncService {
     this.pollIntervalMs = options?.pollIntervalMs || 5000; // Poll every 5 seconds
     this.cleanupIntervalMs = options?.cleanupIntervalMs || 3600000; // Cleanup every hour
     this.eventRetentionHours = options?.eventRetentionHours || 24; // Keep events for 24 hours
+    this.dbSyncIntervalMs = options?.dbSyncIntervalMs || 30000; // Sync with DB every 30 seconds
 
     console.log(`SyncService initialized with instance ID: ${this.instanceId}`);
   }
@@ -65,27 +69,34 @@ export class SyncService {
     // Then process any unprocessed events
     await this.processUnprocessedEvents();
 
+    // Set up periodic polling for unprocessed events
     this.pollInterval = setInterval(async () => {
       await this.processUnprocessedEvents();
     }, this.pollIntervalMs);
 
+    // Set up periodic database sync to catch any servers added directly to DB
+    this.dbSyncInterval = setInterval(async () => {
+      await this.syncExistingServers();
+    }, this.dbSyncIntervalMs);
+
+    // Set up periodic cleanup of old events
     this.cleanupInterval = setInterval(async () => {
       await this.cleanupOldEvents();
     }, this.cleanupIntervalMs);
 
-    console.log(`SyncService started - polling every ${this.pollIntervalMs}ms`);
+    console.log(`SyncService started - polling events every ${this.pollIntervalMs}ms, syncing DB every ${this.dbSyncIntervalMs}ms`);
   }
 
   private async syncExistingServers(): Promise<void> {
-    console.log("Syncing with existing servers from database...");
-
     try {
       // Get all servers from the database
       const result = await this.database.query<McpServerConfig>(
         "SELECT id, name, url, description, enabled FROM servers WHERE enabled = true AND deleted_at IS NULL",
       );
 
-      console.log(`Found ${result.rows.length} servers in database to sync`);
+      const existingServers = this.clientManager.getServerStatuses();
+      const newServersFound: string[] = [];
+      const reconnectedServers: string[] = [];
 
       for (const row of result.rows) {
         const serverConfig: McpServerConfig = {
@@ -96,25 +107,26 @@ export class SyncService {
           enabled: row.enabled !== false,
         };
 
-        const existingServers = this.clientManager.getServerStatuses();
-        const exists = existingServers.some(s => s.name === serverConfig.name);
+        const serverStatus = existingServers.find(s => s.name === serverConfig.name);
 
-        if (!exists) {
-          console.log(`Syncing existing server: ${serverConfig.name} at ${serverConfig.url}`);
+        if (!serverStatus) {
+          // New server found in database that we don't have locally
+          newServersFound.push(serverConfig.name);
 
           try {
             await this.clientManager.connectToServer(serverConfig);
 
             // Check if connection was successful
-            const serverStatuses = this.clientManager.getServerStatuses();
-            const serverStatus = serverStatuses.find(s => s.name === serverConfig.name);
+            const updatedStatuses = this.clientManager.getServerStatuses();
+            const newServerStatus = updatedStatuses.find(s => s.name === serverConfig.name);
 
-            if (serverStatus && serverStatus.connected && this.mcpServer) {
+            if (newServerStatus && newServerStatus.connected && this.mcpServer) {
               const tools = await this.clientManager.buildServerTools(serverConfig);
 
               if (tools && tools.length > 0) {
                 await registerToolsWithMcpServer(serverConfig, this.clientManager, this.mcpServer);
-                console.log(`Synced ${tools.length} tools for server: ${serverConfig.name}`);
+
+                console.log(`Synced ${tools.length} tools for new server: ${serverConfig.name}`);
               } else {
                 console.log(`Server ${serverConfig.name} connected but has no tools`);
               }
@@ -124,23 +136,39 @@ export class SyncService {
           } catch (error: unknown) {
             console.error(`Failed to sync server ${serverConfig.name}:`, error);
           }
-        } else {
-          console.log(`Server ${serverConfig.name} already exists, checking connection and tools...`);
+        } else if (!serverStatus.connected) {
+          try {
+            console.log(`Attempting to reconnect to disconnected server: ${serverConfig.name}`);
 
-          const serverStatuses = this.clientManager.getServerStatuses();
-          const serverStatus = serverStatuses.find(s => s.name === serverConfig.name);
+            await this.clientManager.reconnectToServer(serverConfig.name);
 
-          if (serverStatus && serverStatus.connected && this.mcpServer) {
-            const tools = await this.clientManager.buildServerTools(serverConfig);
+            const updatedStatuses = this.clientManager.getServerStatuses();
+            const updatedStatus = updatedStatuses.find(s => s.name === serverConfig.name);
 
-            if (tools && tools.length > 0) {
-              await registerToolsWithMcpServer(serverConfig, this.clientManager, this.mcpServer);
-              console.log(`Ensured ${tools.length} tools are registered for server: ${serverConfig.name}`);
+            if (updatedStatus && updatedStatus.connected && this.mcpServer) {
+              reconnectedServers.push(serverConfig.name);
+
+              const tools = await this.clientManager.buildServerTools(serverConfig);
+
+              if (tools && tools.length > 0) {
+                await registerToolsWithMcpServer(serverConfig, this.clientManager, this.mcpServer);
+
+                console.log(`Re-registered ${tools.length} tools for reconnected server: ${serverConfig.name}`);
+              }
             }
-          } else if (serverStatus && !serverStatus.connected) {
-            console.log(`Server ${serverConfig.name} exists but is not connected, skipping tool registration`);
+          } catch (error: unknown) {
+            console.error(`Failed to reconnect to server ${serverConfig.name}:`, error);
           }
         }
+      }
+
+      // Only log if there were changes
+      if (newServersFound.length > 0) {
+        console.log(`Database sync found ${newServersFound.length} new servers: ${newServersFound.join(", ")}`);
+      }
+
+      if (reconnectedServers.length > 0) {
+        console.log(`Database sync reconnected ${reconnectedServers.length} servers: ${reconnectedServers.join(", ")}`);
       }
     } catch (error: unknown) {
       console.error("Failed to sync existing servers:", error);
@@ -152,17 +180,24 @@ export class SyncService {
       clearInterval(this.pollInterval);
       this.pollInterval = undefined;
     }
+
+    if (this.dbSyncInterval) {
+      clearInterval(this.dbSyncInterval);
+      this.dbSyncInterval = undefined;
+    }
+
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = undefined;
     }
+
     console.log("SyncService stopped");
   }
 
   async publishEvent(eventType: SyncEventType, eventData: Record<string, unknown>): Promise<void> {
     try {
       await this.database.query(
-        `INSERT INTO sync_events (event_type, event_data, instance_id) 
+        `INSERT INTO sync_events (event_type, event_data, instance_id)
          VALUES ($1, $2, $3)`,
         [eventType, JSON.stringify(eventData), this.instanceId],
       );
@@ -174,7 +209,7 @@ export class SyncService {
   private async processUnprocessedEvents(): Promise<void> {
     try {
       const result = await this.database.query<SyncEvent>(
-        `SELECT * FROM sync_events 
+        `SELECT * FROM sync_events
          WHERE processed_by IS NULL OR NOT ($1 = ANY(processed_by))
          ORDER BY created_at ASC
          LIMIT 100`,
@@ -296,11 +331,11 @@ export class SyncService {
   private async markEventProcessed(eventId: string): Promise<void> {
     try {
       await this.database.query(
-        `UPDATE sync_events 
+        `UPDATE sync_events
          SET processed_by = array_append(COALESCE(processed_by, ARRAY[]::varchar[]), $1),
-             processed_at = CASE 
-               WHEN processed_at IS NULL THEN NOW() 
-               ELSE processed_at 
+             processed_at = CASE
+               WHEN processed_at IS NULL THEN NOW()
+               ELSE processed_at
              END
          WHERE id = $2`,
         [this.instanceId, eventId],
