@@ -8,6 +8,76 @@ import { jsonSchemaToZodShape, type JsonSchema } from "./schemaTransform.js";
 const registeredTools = new Set<string>();
 const toolToServerMap = new Map<string, string>();
 
+export const unregisterToolsFromMcpServer = (
+  serverName: string,
+): string[] => {
+  const toolsToRemove: string[] = [];
+
+  toolToServerMap.forEach((server, toolName) => {
+    if (server === serverName) {
+      toolsToRemove.push(toolName);
+    }
+  });
+
+  toolsToRemove.forEach(toolName => {
+    registeredTools.delete(toolName);
+    toolToServerMap.delete(toolName);
+    console.log(`  Removed tool: ${toolName}`);
+  });
+
+  return toolsToRemove;
+};
+
+export const registerToolsWithMcpServer = async (
+  serverConfig: McpServerConfig,
+  clientManager: ClientManager,
+  server: McpServer,
+): Promise<void> => {
+  const tools = await clientManager.buildServerTools(serverConfig);
+
+  if (tools) {
+    for (const tool of tools) {
+      if (registeredTools.has(tool.name)) {
+        console.log(`Tool ${tool.name} already registered, skipping...`);
+        continue;
+      }
+
+      const zodShape = jsonSchemaToZodShape(tool.inputSchema as JsonSchema);
+
+      const mcpServer = server as {
+        tool: (name: string, desc: string, schema: Record<string, unknown>,
+        callback: (args: Record<string, unknown>, extra?: unknown) => Promise<unknown>) => void
+      };
+
+      mcpServer.tool(
+        tool.name,
+        tool.description || "Tool from registered MCP server",
+        zodShape,
+        async (args: Record<string, unknown>, extra?: unknown) => {
+          const serverName = toolToServerMap.get(tool.name);
+
+          if (!serverName || !registeredTools.has(tool.name)) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Error: Server for tool ${tool.name} has been unregistered`,
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          return await tool.handler(args, extra);
+        },
+      );
+
+      registeredTools.add(tool.name);
+      toolToServerMap.set(tool.name, serverConfig.name);
+    }
+  }
+};
+
 export const registerServer = async (
   serverConfig: McpServerConfig,
   clientManager: ClientManager,
@@ -86,64 +156,14 @@ export const registerServer = async (
       config.servers.push(serverConfig);
     }
 
-    const oldToolPrefix = `${serverConfig.name}:`;
-    const toolsToRemove = Array.from(registeredTools).filter(toolName =>
-      toolName.startsWith(oldToolPrefix),
-    );
+    const toolsRemoved = unregisterToolsFromMcpServer(serverConfig.name);
 
-    console.log(`Clearing ${toolsToRemove.length} existing tools for server ${serverConfig.name}`);
-
-    toolsToRemove.forEach(toolName => {
-      console.log(`  Removing tool: ${toolName}`);
-      registeredTools.delete(toolName);
-      toolToServerMap.delete(toolName);
-    });
+    if (toolsRemoved.length > 0) {
+      console.log(`Cleared ${toolsRemoved.length} existing tools for server ${serverConfig.name}`);
+    }
 
     await clientManager.connectToServer(serverConfig);
-
-    const tools = await clientManager.buildServerTools(serverConfig);
-
-    if (tools) {
-      for (const tool of tools) {
-        if (registeredTools.has(tool.name)) {
-          console.log(`Tool ${tool.name} already registered, skipping...`);
-          continue;
-        }
-
-        const zodShape = jsonSchemaToZodShape(tool.inputSchema as JsonSchema);
-
-        const mcpServer = server as {
-          tool: (name: string, desc: string, schema: Record<string, unknown>,
-          callback: (args: Record<string, unknown>, extra?: unknown) => Promise<unknown>) => void
-        };
-
-        mcpServer.tool(
-          tool.name,
-          tool.description || "Tool from registered MCP server",
-          zodShape,
-          async (args: Record<string, unknown>, extra?: unknown) => {
-            const serverName = toolToServerMap.get(tool.name);
-
-            if (!serverName || !registeredTools.has(tool.name)) {
-              return {
-                content: [
-                  {
-                    type: "text",
-                    text: `Error: Server for tool ${tool.name} has been unregistered`,
-                  },
-                ],
-                isError: true,
-              };
-            }
-
-            return await tool.handler(args, extra);
-          },
-        );
-
-        registeredTools.add(tool.name);
-        toolToServerMap.set(tool.name, serverConfig.name);
-      }
-    }
+    await registerToolsWithMcpServer(serverConfig, clientManager, server);
 
     const routerStats = clientManager.getStats();
     stats.totalServers = routerStats.totalServers;
@@ -207,18 +227,8 @@ export const unregisterServer = async (
       };
     }
 
-    const toolPrefix = `${serverName}:`;
-    const toolsToRemove = Array.from(registeredTools).filter(toolName =>
-      toolName.startsWith(toolPrefix),
-    );
-
-    console.log(`Removing ${toolsToRemove.length} tools from server ${serverName}`);
-
-    toolsToRemove.forEach(toolName => {
-      registeredTools.delete(toolName);
-      toolToServerMap.delete(toolName);
-      console.log(`  Removed tool: ${toolName}`);
-    });
+    const toolsRemoved = unregisterToolsFromMcpServer(serverName);
+    console.log(`Removed ${toolsRemoved.length} tools from server ${serverName}`);
 
     if (serverIndex !== -1) {
       config.servers.splice(serverIndex, 1);

@@ -586,6 +586,7 @@ const main = async () => {
           pollIntervalMs: Number(process.env.SYNC_POLL_INTERVAL_MS) || 5000,
           cleanupIntervalMs: Number(process.env.SYNC_CLEANUP_INTERVAL_MS) || 3600000,
           eventRetentionHours: Number(process.env.SYNC_EVENT_RETENTION_HOURS) || 24,
+          mcpServer: server,
         });
 
         await syncService.start();

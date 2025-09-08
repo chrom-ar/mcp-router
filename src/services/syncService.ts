@@ -1,7 +1,11 @@
-import { Database } from "./database.js";
-import { ClientManager } from "./clientManager.js";
-import { McpServerConfig } from "../types/index.js";
 import { v4 as uuidv4 } from "uuid";
+
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+import { ClientManager } from "./clientManager.js";
+import { Database } from "./database.js";
+import { McpServerConfig } from "../types/index.js";
+import { registerToolsWithMcpServer, unregisterToolsFromMcpServer } from "../utils/serverManagement.js";
 
 export enum SyncEventType {
   SERVER_REGISTERED = "SERVER_REGISTERED",
@@ -25,6 +29,7 @@ export class SyncService {
   private instanceId: string;
   private database: Database;
   private clientManager: ClientManager;
+  private mcpServer?: McpServer;
   private pollInterval?: NodeJS.Timeout;
   private pollIntervalMs: number;
   private cleanupIntervalMs: number;
@@ -39,11 +44,13 @@ export class SyncService {
       pollIntervalMs?: number;
       cleanupIntervalMs?: number;
       eventRetentionHours?: number;
+      mcpServer?: McpServer;
     },
   ) {
     this.instanceId = options?.instanceId || `router-${uuidv4()}`;
     this.database = database;
     this.clientManager = clientManager;
+    this.mcpServer = options?.mcpServer;
     this.pollIntervalMs = options?.pollIntervalMs || 5000; // Poll every 5 seconds
     this.cleanupIntervalMs = options?.cleanupIntervalMs || 3600000; // Cleanup every hour
     this.eventRetentionHours = options?.eventRetentionHours || 24; // Keep events for 24 hours
@@ -150,6 +157,12 @@ export class SyncService {
     if (!exists) {
       console.log(`Syncing new server registration: ${config.name}`);
       await this.clientManager.connectToServer(config);
+
+      if (this.mcpServer) {
+        await registerToolsWithMcpServer(config, this.clientManager, this.mcpServer);
+
+        console.log(`Registered tools for synced server: ${config.name}`);
+      }
     }
   }
 
@@ -159,6 +172,8 @@ export class SyncService {
 
     if (exists) {
       console.log(`Syncing server unregistration: ${data.name}`);
+
+      unregisterToolsFromMcpServer(data.name);
       await this.clientManager.disconnectFromServer(data.name);
     }
   }
