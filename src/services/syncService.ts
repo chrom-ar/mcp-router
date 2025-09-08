@@ -122,6 +122,7 @@ export class SyncService {
 
   private async processEvent(event: SyncEvent): Promise<void> {
     console.log(`Processing sync event: ${event.event_type} from ${event.instance_id}`);
+    console.log("Event data:", JSON.stringify(event.event_data, null, 2));
 
     try {
       switch (event.event_type) {
@@ -155,14 +156,21 @@ export class SyncService {
     const exists = existingServers.some(s => s.name === config.name);
 
     if (!exists) {
-      console.log(`Syncing new server registration: ${config.name}`);
+      console.log(`Syncing new server registration: ${config.name} from ${config.url}`);
+
       await this.clientManager.connectToServer(config);
 
       if (this.mcpServer) {
+        console.log(`Registering tools for synced server: ${config.name}`);
+
         await registerToolsWithMcpServer(config, this.clientManager, this.mcpServer);
 
-        console.log(`Registered tools for synced server: ${config.name}`);
+        const tools = await this.clientManager.buildServerTools(config);
+
+        console.log(`Registered ${tools?.length || 0} tools for synced server: ${config.name}`);
       }
+    } else {
+      console.log(`Server ${config.name} already exists, skipping sync`);
     }
   }
 

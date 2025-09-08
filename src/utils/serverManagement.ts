@@ -11,10 +11,11 @@ const toolToServerMap = new Map<string, string>();
 export const unregisterToolsFromMcpServer = (
   serverName: string,
 ): string[] => {
+  const toolPrefix = `${serverName}:`;
   const toolsToRemove: string[] = [];
 
-  toolToServerMap.forEach((server, toolName) => {
-    if (server === serverName) {
+  registeredTools.forEach(toolName => {
+    if (toolName.startsWith(toolPrefix)) {
       toolsToRemove.push(toolName);
     }
   });
