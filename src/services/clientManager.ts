@@ -1,7 +1,7 @@
+import { ZodRawShape } from "zod";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { jsonSchemaToZod, type JsonSchema } from "json-schema-to-zod";
-import { z, ZodRawShape } from "zod";
 
 import { ServerRepository } from "../repositories/serverRepository.js";
 import { EventLogger } from "./eventLogger.js";
@@ -208,16 +208,7 @@ export class ClientManager {
         const aggregatedTools: AggregatedTool[] = toolsResult.tools.map((tool: { name: string; description?: string; inputSchema: unknown }) => {
           const aggregatedName = `${serverId}${this.toolNameSeparator}${tool.name}`;
 
-          let schema: ZodRawShape = {};
-          try {
-            const schemaString = jsonSchemaToZod(tool.inputSchema as JsonSchema);
-            const evalContext = { z };
-
-            schema = eval(`(function() { const { z } = arguments[0]; return ${schemaString}; })`)(evalContext);
-          } catch (evalError: unknown) {
-            console.error(`Failed to eval schema for ${tool.name}:`, evalError);
-            throw evalError;
-          }
+          const schema: ZodRawShape = {};
 
           // Store the tool route for efficient lookup
           this.toolRoutes.set(aggregatedName, {
@@ -231,6 +222,7 @@ export class ClientManager {
             name: aggregatedName,
             description: `[${config.name}] ${tool.description}`,
             schema,
+            inputSchema: tool.inputSchema,
             handler: async (args: ToolHandlerArgs): Promise<ToolHandlerResult> => {
               try {
                 // console.log(`Routing ${config.name}:${tool.name} with args: ${JSON.stringify(args)}`);
@@ -285,22 +277,13 @@ export class ClientManager {
       if (toolsResult && toolsResult.tools) {
         const aggregatedTools: AggregatedTool[] = toolsResult.tools.map((tool: { name: string; description?: string; inputSchema: unknown }) => {
           const aggregatedName = `${serverId}${this.toolNameSeparator}${tool.name}`;
-
-          let schema: ZodRawShape = {};
-          try {
-            const schemaString = jsonSchemaToZod(tool.inputSchema as JsonSchema);
-            // Make z available in eval context
-            const evalContext = { z };
-            schema = eval(`(function() { const { z } = arguments[0]; return ${schemaString}; })`)(evalContext);
-          } catch (evalError: unknown) {
-            console.error(`Failed to eval schema for ${tool.name}:`, evalError);
-            throw evalError;
-          }
+          const schema: ZodRawShape = {};
 
           return {
             name: aggregatedName,
             description: `[${config.name}] ${tool.description}`,
             schema,
+            inputSchema: tool.inputSchema,
             handler: async (args: ToolHandlerArgs): Promise<ToolHandlerResult> => {
               try {
                 // stats.requestCount++;

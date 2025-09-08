@@ -55,6 +55,7 @@ export interface AggregatedTool {
   name: string;
   description: string;
   schema: ZodRawShape;
+  inputSchema: unknown; // Original JSON Schema for MCP registration
   handler: (args: ToolHandlerArgs, extra?: unknown) => Promise<ToolHandlerResult>;
 }
 

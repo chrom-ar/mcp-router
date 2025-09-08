@@ -2,6 +2,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { ClientManager } from "../services/clientManager.js";
 import type { McpServerConfig, RouterConfig, RouterStats } from "../types/index.js";
+import { jsonSchemaToZodShape, type JsonSchema } from "./schemaTransform.js";
+
+const registeredTools = new Set<string>();
+const toolToServerMap = new Map<string, string>();
 
 export const registerServer = async (
   serverConfig: McpServerConfig,
@@ -27,20 +31,62 @@ export const registerServer = async (
       config.servers.push(serverConfig);
     }
 
+    const oldToolPrefix = `${serverConfig.name}:`;
+    const toolsToRemove = Array.from(registeredTools).filter(toolName =>
+      toolName.startsWith(oldToolPrefix)
+    );
+
+    console.log(`Clearing ${toolsToRemove.length} existing tools for server ${serverConfig.name}`);
+
+    toolsToRemove.forEach(toolName => {
+      console.log(`  Removing tool: ${toolName}`);
+      registeredTools.delete(toolName);
+      toolToServerMap.delete(toolName);
+    });
+
     await clientManager.connectToServer(serverConfig);
 
     const tools = await clientManager.buildServerTools(serverConfig);
 
     if (tools) {
       for (const tool of tools) {
-        (server.tool as unknown as (name: string, description: string, schema: unknown, handler: unknown) => void)(
+        if (registeredTools.has(tool.name)) {
+          console.log(`Tool ${tool.name} already registered, skipping...`);
+          continue;
+        }
+
+        const zodShape = jsonSchemaToZodShape(tool.inputSchema as JsonSchema);
+
+        const mcpServer = server as {
+          tool: (name: string, desc: string, schema: Record<string, unknown>,
+          callback: (args: Record<string, unknown>, extra?: unknown) => Promise<unknown>) => void
+        };
+
+        mcpServer.tool(
           tool.name,
-          tool.description,
-          tool.schema,
+          tool.description || "Tool from registered MCP server",
+          zodShape,
           async (args: Record<string, unknown>, extra?: unknown) => {
+            const serverName = toolToServerMap.get(tool.name);
+
+            if (!serverName || !registeredTools.has(tool.name)) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: Server for tool ${tool.name} has been unregistered`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+
             return await tool.handler(args, extra);
-          },
+          }
         );
+
+        registeredTools.add(tool.name);
+        toolToServerMap.set(tool.name, serverConfig.name);
       }
     }
 
@@ -97,6 +143,19 @@ export const unregisterServer = async (
       };
     }
 
+    const toolPrefix = `${serverName}:`;
+    const toolsToRemove = Array.from(registeredTools).filter(toolName =>
+      toolName.startsWith(toolPrefix)
+    );
+
+    console.log(`Removing ${toolsToRemove.length} tools from server ${serverName}`);
+
+    toolsToRemove.forEach(toolName => {
+      registeredTools.delete(toolName);
+      toolToServerMap.delete(toolName);
+      console.log(`  Removed tool: ${toolName}`);
+    });
+
     if (serverIndex !== -1) {
       config.servers.splice(serverIndex, 1);
     }
@@ -128,6 +187,14 @@ export const unregisterServer = async (
       error: error instanceof Error ? error.message : "Unknown error",
     };
   }
+};
+
+export const isToolActive = (toolName: string): boolean => {
+  return registeredTools.has(toolName);
+};
+
+export const getActiveTools = (): Set<string> => {
+  return new Set(registeredTools);
 };
 
 export const formatUptime = (ms: number): string => {

@@ -3,6 +3,7 @@
 import express, { Request, Response } from "express";
 import { z } from "zod";
 import dotenv from "dotenv";
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
@@ -15,7 +16,7 @@ import { EventLogger } from "./services/eventLogger.js";
 import { MigrationRunner } from "./services/migrationRunner.js";
 import { runWithContext } from "./services/requestContext.js";
 import type { RouterConfig, McpServerConfig, RouterStats } from "./types/index.js";
-import { registerServer, unregisterServer, formatUptime } from "./utils/serverManagement.js";
+import { registerServer, unregisterServer, formatUptime, isToolActive } from "./utils/serverManagement.js";
 
 // Load environment variables
 dotenv.config();
@@ -116,6 +117,7 @@ server.tool(
     try {
       const tools = clientManager.getAllTools();
       const routerStats = clientManager.getStats();
+      const activeTools = tools.filter(tool => isToolActive(tool.name));
 
       return {
         content: [
@@ -125,9 +127,9 @@ server.tool(
               summary: {
                 totalServers: routerStats.totalServers,
                 connectedServers: routerStats.connectedServers,
-                totalTools: tools.length,
+                totalTools: activeTools.length,
               },
-              tools: tools.map(tool => ({
+              tools: activeTools.map(tool => ({
                 name: tool.name,
                 description: tool.description || "No description available",
                 schema: tool.schema.shape,
@@ -187,24 +189,28 @@ server.tool(
 );
 
 // Add server registration tool
+const registerServerSchema = z.object({
+  name: z.string().describe("Unique name for the server"),
+  url: z.string().describe("URL of the MCP server endpoint"),
+  description: z.string().optional().describe("Optional description of the server"),
+  enabled: z.boolean().optional().default(true).describe("Whether the server should be enabled"),
+  autoReconnect: z.boolean().optional().default(true).describe("Whether to auto-reconnect on ping failures"),
+});
+
+// @ts-ignore TypeScript has issues with deep type instantiation in MCP SDK with Zod
 server.tool(
   "router:register-server",
   "Register a new MCP server with the router",
-  {
-    name: z.string().describe("Unique name for the server"),
-    url: z.string().describe("URL of the MCP server endpoint"),
-    description: z.string().optional().describe("Optional description of the server"),
-    enabled: z.boolean().optional().default(true).describe("Whether the server should be enabled"),
-    autoReconnect: z.boolean().optional().default(true).describe("Whether to auto-reconnect on ping failures"),
-  },
-  async args => {
+  registerServerSchema.shape as Record<string, z.ZodTypeAny>,
+  async (args) => {
+    const typedArgs = args as { name: string; url: string; description?: string; enabled?: boolean; autoReconnect?: boolean };
     const serverConfig: McpServerConfig = {
       id: "",
-      name: args.name,
-      url: args.url,
-      description: args.description || `MCP Server: ${args.name}`,
-      enabled: args.enabled ?? true,
-      autoReconnect: args.autoReconnect ?? true,
+      name: typedArgs.name,
+      url: typedArgs.url,
+      description: typedArgs.description || `MCP Server: ${typedArgs.name}`,
+      enabled: typedArgs.enabled ?? true,
+      autoReconnect: typedArgs.autoReconnect ?? true,
     };
 
     const result = await registerServer(serverConfig, clientManager, config, stats, server);
@@ -237,14 +243,18 @@ server.tool(
   },
 );
 
+const unregisterServerSchema = z.object({
+  serverName: z.string().describe("Name of the server to unregister"),
+});
+
+// @ts-ignore TypeScript has issues with deep type instantiation in MCP SDK with Zod
 server.tool(
   "router:unregister-server",
   "Unregister an MCP server from the router",
-  {
-    serverName: z.string().describe("Name of the server to unregister"),
-  },
-  async args => {
-    const result = await unregisterServer(args.serverName, clientManager, config, stats);
+  unregisterServerSchema.shape as Record<string, z.ZodTypeAny>,
+  async (args) => {
+    const typedArgs = args as { serverName: string };
+    const result = await unregisterServer(typedArgs.serverName, clientManager, config, stats);
 
     if (result.success) {
       return {
@@ -273,15 +283,20 @@ server.tool(
   },
 );
 
+// Add reconnect server tool
+const reconnectServerSchema = z.object({
+  serverName: z.string().describe("Name of the server to reconnect"),
+});
+
+// @ts-ignore TypeScript has issues with deep type instantiation in MCP SDK with Zod
 server.tool(
   "router:reconnect-server",
   "Reconnect to a specific MCP server",
-  {
-    serverName: z.string().describe("Name of the server to reconnect"),
-  },
-  async args => {
+  reconnectServerSchema.shape as Record<string, z.ZodTypeAny>,
+  async (args) => {
+    const typedArgs = args as { serverName: string };
     try {
-      await clientManager.reconnectToServer(args.serverName);
+      await clientManager.reconnectToServer(typedArgs.serverName);
 
       // Update stats after reconnection
       const routerStats = clientManager.getStats();
@@ -295,7 +310,7 @@ server.tool(
             type: "text",
             text: JSON.stringify({
               success: true,
-              message: `Successfully reconnected to server: ${args.serverName}`,
+              message: `Successfully reconnected to server: ${typedArgs.serverName}`,
               stats: {
                 totalServers: stats.totalServers,
                 connectedServers: stats.connectedServers,
@@ -306,13 +321,13 @@ server.tool(
         ],
       };
     } catch (error: unknown) {
-      console.error(`Error reconnecting to server ${args.serverName}:`, error);
+      console.error(`Error reconnecting to server ${typedArgs.serverName}:`, error);
 
       return {
         content: [
           {
             type: "text",
-            text: `Error reconnecting to server ${args.serverName}: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error reconnecting to server ${typedArgs.serverName}: ${error instanceof Error ? error.message : "Unknown error"}`,
           },
         ],
         isError: true,

@@ -48,19 +48,13 @@ export const validateApiKey = async (
 
 export const authMiddleware = (authConfig: AuthConfig) => {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    console.log(`Auth middleware: enabled=${authConfig.enabled}, path=${req.path}`);
-
     if (!authConfig.enabled) {
-      console.log("Auth disabled, allowing request");
-
       return next();
     }
 
     const path = req.path;
 
     if (authConfig.skipPaths?.some(skipPath => path.startsWith(skipPath))) {
-      console.log(`Path ${path} is in skip list, allowing request`);
-
       return next();
     }
 
