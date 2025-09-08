@@ -17,7 +17,7 @@ import { MigrationRunner } from "./services/migrationRunner.js";
 import { runWithContext } from "./services/requestContext.js";
 import { SyncService, SyncEventType } from "./services/syncService.js";
 import type { RouterConfig, McpServerConfig, RouterStats } from "./types/index.js";
-import { registerServer, unregisterServer, formatUptime, isToolActive } from "./utils/serverManagement.js";
+import { registerServer, unregisterServer, formatUptime } from "./utils/serverManagement.js";
 
 // Load environment variables
 dotenv.config();
@@ -121,7 +121,6 @@ server.tool(
     try {
       const tools = clientManager.getAllTools();
       const routerStats = clientManager.getStats();
-      const activeTools = tools.filter(tool => isToolActive(tool.name));
 
       return {
         content: [
@@ -131,9 +130,9 @@ server.tool(
               summary: {
                 totalServers: routerStats.totalServers,
                 connectedServers: routerStats.connectedServers,
-                totalTools: activeTools.length,
+                totalTools: tools.length,
               },
-              tools: activeTools.map(tool => ({
+              tools: tools.map(tool => ({
                 name: tool.name,
                 description: tool.description || "No description available",
                 schema: tool.schema.shape,

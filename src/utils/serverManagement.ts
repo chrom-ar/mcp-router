@@ -282,7 +282,7 @@ export const unregisterServer = async (
   }
 };
 
-export const isToolActive = (toolName: string): boolean => {
+export const Active = (toolName: string): boolean => {
   return registeredTools.has(toolName);
 };
 
