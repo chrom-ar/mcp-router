@@ -15,6 +15,7 @@ import { initDatabaseFromEnv } from "./services/database.js";
 import { EventLogger } from "./services/eventLogger.js";
 import { MigrationRunner } from "./services/migrationRunner.js";
 import { runWithContext } from "./services/requestContext.js";
+import { SyncService, SyncEventType } from "./services/syncService.js";
 import type { RouterConfig, McpServerConfig, RouterStats } from "./types/index.js";
 import { registerServer, unregisterServer, formatUptime, isToolActive } from "./utils/serverManagement.js";
 
@@ -57,6 +58,9 @@ let auditLogger: AuditLogger | undefined;
 
 // Initialize client manager (will be updated with persistence in main())
 const clientManager = new ClientManager(config.toolNameSeparator);
+
+// Sync service will be initialized after database connection
+let syncService: SyncService | undefined;
 
 // Router stats
 const stats: RouterStats = {
@@ -213,7 +217,7 @@ server.tool(
       autoReconnect: typedArgs.autoReconnect ?? true,
     };
 
-    const result = await registerServer(serverConfig, clientManager, config, stats, server);
+    const result = await registerServer(serverConfig, clientManager, config, stats, server, syncService);
 
     if (result.success) {
       return {
@@ -254,7 +258,7 @@ server.tool(
   unregisterServerSchema.shape as Record<string, z.ZodTypeAny>,
   async args => {
     const typedArgs = args as { serverName: string };
-    const result = await unregisterServer(typedArgs.serverName, clientManager, config, stats);
+    const result = await unregisterServer(typedArgs.serverName, clientManager, config, stats, syncService);
 
     if (result.success) {
       return {
@@ -466,7 +470,7 @@ app.post("/register", async (req: Request, res: Response) => {
       autoReconnect: autoReconnect,
     };
 
-    const result = await registerServer(serverConfig, clientManager, config, stats, server);
+    const result = await registerServer(serverConfig, clientManager, config, stats, server, syncService);
 
     if (result.success) {
       res.json({
@@ -506,7 +510,7 @@ app.post("/register", async (req: Request, res: Response) => {
 app.delete("/register/:serverName", async (req: Request, res: Response) => {
   try {
     const { serverName } = req.params;
-    const result = await unregisterServer(serverName, clientManager, config, stats);
+    const result = await unregisterServer(serverName, clientManager, config, stats, syncService);
 
     if (result.success) {
       res.json({
@@ -576,6 +580,16 @@ const main = async () => {
 
         console.log("Database initialized successfully");
 
+        // Initialize sync service for multi-instance coordination
+        syncService = new SyncService(database, clientManager, {
+          instanceId: process.env.INSTANCE_ID || undefined,
+          pollIntervalMs: Number(process.env.SYNC_POLL_INTERVAL_MS) || 5000,
+          cleanupIntervalMs: Number(process.env.SYNC_CLEANUP_INTERVAL_MS) || 3600000,
+          eventRetentionHours: Number(process.env.SYNC_EVENT_RETENTION_HOURS) || 24,
+        });
+
+        await syncService.start();
+
         // Load persisted servers and refresh their tools
         await clientManager.loadPersistedServers();
 
@@ -591,7 +605,7 @@ const main = async () => {
               if (serverConfig) {
                 console.log(`  Refreshing tools for server: ${serverConfig.name}`);
 
-                await registerServer(serverConfig, clientManager, config, stats, server);
+                await registerServer(serverConfig, clientManager, config, stats, server, syncService);
               }
             }
           }
@@ -651,6 +665,11 @@ const gracefulShutdown = async (signal: string) => {
   try {
     await clientManager.disconnectAll();
     console.error("Disconnected from all MCP servers");
+
+    if (syncService) {
+      syncService.stop();
+      console.error("Sync service stopped");
+    }
 
     if (eventLogger) {
       await eventLogger.shutdown();

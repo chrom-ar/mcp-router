@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { ClientManager } from "../services/clientManager.js";
+import { SyncService, SyncEventType } from "../services/syncService.js";
 import type { McpServerConfig, RouterConfig, RouterStats } from "../types/index.js";
 import { jsonSchemaToZodShape, type JsonSchema } from "./schemaTransform.js";
 
@@ -13,6 +14,7 @@ export const registerServer = async (
   config: RouterConfig,
   stats: RouterStats,
   server: McpServer,
+  syncService?: SyncService,
 ): Promise<{
   success: boolean;
   message: string;
@@ -152,6 +154,14 @@ export const registerServer = async (
 
     console.log(`${action} server: ${serverConfig.name}`);
 
+    // Publish sync event for other instances
+    if (syncService) {
+      await syncService.publishEvent(
+        isUpdate ? SyncEventType.SERVER_UPDATED : SyncEventType.SERVER_REGISTERED,
+        serverConfig as unknown as Record<string, unknown>,
+      );
+    }
+
     return {
       success: true,
       message: `Successfully ${action.toLowerCase()} server: ${serverConfig.name}`,
@@ -178,6 +188,7 @@ export const unregisterServer = async (
   clientManager: ClientManager,
   config: RouterConfig,
   stats: RouterStats,
+  syncService?: SyncService,
 ): Promise<{
   success: boolean;
   message: string;
@@ -221,6 +232,14 @@ export const unregisterServer = async (
     stats.totalTools = routerStats.totalTools;
 
     console.log(`Unregistered server: ${serverName}`);
+
+    // Publish sync event for other instances
+    if (syncService) {
+      await syncService.publishEvent(
+        SyncEventType.SERVER_UNREGISTERED,
+        { name: serverName },
+      );
+    }
 
     return {
       success: true,
