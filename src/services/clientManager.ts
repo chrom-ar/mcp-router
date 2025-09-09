@@ -249,6 +249,8 @@ export class ClientManager {
               }
 
               if (this.auditLogger) {
+                const context = getRequestContext();
+
                 await this.auditLogger.logToolCall({
                   toolName: aggregatedName,
                   serverName: serverId,
@@ -257,7 +259,9 @@ export class ClientManager {
                   durationMs: Date.now() - startTime,
                   status: error ? "error" : "success",
                   errorMessage: error?.message,
-                  userId: typeof extra === "object" && extra && "userId" in extra ? (extra as { userId?: string }).userId : undefined,
+                  userId: context?.userId,
+                  userEmail: context?.userEmail,
+                  apiKey: context?.apiKey,
                 });
               }
 
