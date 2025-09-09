@@ -211,35 +211,61 @@ export class ClientManager {
             description: `[${config.name}] ${tool.description}`,
             schema,
             inputSchema: tool.inputSchema,
-            handler: async (args: ToolHandlerArgs): Promise<ToolHandlerResult> => {
+            handler: async (args: ToolHandlerArgs, extra?: unknown): Promise<ToolHandlerResult> => {
               // Get fresh connection in case it was reconnected
               const currentConnection = this.connections.get(serverId);
               if (!currentConnection || !currentConnection.status.connected) {
                 throw new Error(`Server ${serverId} is not connected`);
               }
 
+              const startTime = Date.now();
+              let result: ToolHandlerResult;
+              let error: Error | undefined;
+
               try {
-                const result = await currentConnection.client.callTool({
+                const callResult = await currentConnection.client.callTool({
                   name: tool.name,
                   arguments: args || {},
                 });
                 // Ensure content is always present
-                return {
-                  ...result,
-                  content: result.content || [],
+                result = {
+                  ...callResult,
+                  content: callResult.content || [],
                 } as ToolHandlerResult;
-              } catch (error: unknown) {
-                console.error(`Error calling tool ${tool.name}:`, error);
-                return {
+              } catch (e: unknown) {
+                error = e instanceof Error ? e : new Error("Unknown error");
+
+                console.error(`Error calling tool ${tool.name}:`, e);
+
+                result = {
                   content: [
                     {
                       type: "text",
-                      text: `Error calling tool ${tool.name}: ${error instanceof Error ? error.message : "Unknown error"}`,
+                      text: `Error calling tool ${tool.name}: ${error.message}`,
                     },
                   ],
                   isError: true,
                 };
               }
+
+              if (this.auditLogger) {
+                await this.auditLogger.logToolCall({
+                  toolName: aggregatedName,
+                  serverName: serverId,
+                  arguments: args,
+                  response: error ? { error: error.message } : result,
+                  durationMs: Date.now() - startTime,
+                  status: error ? "error" : "success",
+                  errorMessage: error?.message,
+                  userId: typeof extra === "object" && extra && "userId" in extra ? (extra as { userId?: string }).userId : undefined,
+                });
+              }
+
+              if (error) {
+                throw error;
+              }
+
+              return result;
             },
           };
         });
