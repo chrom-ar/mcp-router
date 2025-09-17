@@ -1,4 +1,4 @@
-name: Deploy
+name: CI/CD
 
 on:
   push:
@@ -10,10 +10,72 @@ env:
   EKS_CLUSTER_NAME: chroma-cluster
   ECR_REPOSITORY: chroma/mcp-router
   NAMESPACE: mcp-router
+  NODE_VERSION: 24.x
 
 jobs:
-  build-and-deploy:
+  test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: mcp_router_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/mcp_router_test
+          NODE_ENV: test
+          ROUTER_PORT: 4001
+
+      - name: Verify
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Error: Uncommitted changes detected after build"
+            git status --porcelain
+            exit 1
+          fi
+
+      - name: Audit
+        run: npm audit --audit-level=high
+        # continue-on-error: true
+
+  build-and-deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
 
     steps:
     - name: Checkout
