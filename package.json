@@ -23,7 +23,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.17.5",
+    "@modelcontextprotocol/sdk": "1.18.0",
     "@types/pg": "^8.15.5",
     "@types/uuid": "^10.0.0",
     "dotenv": "17.2.2",
@@ -31,17 +31,17 @@
     "json-schema-to-zod": "2.6.1",
     "pg": "^8.16.3",
     "umzug": "^3.8.2",
-    "uuid": "^12.0.0",
+    "uuid": "^13.0.0",
     "zod": "3.25.67"
   },
   "devDependencies": {
     "@types/express": "5.0.3",
-    "@types/node": "24.3.1",
-    "@typescript-eslint/eslint-plugin": "^8.43.0",
-    "@typescript-eslint/parser": "^8.43.0",
+    "@types/node": "24.5.1",
+    "@typescript-eslint/eslint-plugin": "^8.44.0",
+    "@typescript-eslint/parser": "^8.44.0",
     "eslint": "^9.35.0",
     "typescript": "5.9.2",
-    "vitest": "2.1.9"
+    "vitest": "^3.2.4"
   },
   "engines": {
     "node": ">=18"
