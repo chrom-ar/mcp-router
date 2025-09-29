@@ -72,6 +72,9 @@ describe("MCP Router Server", () => {
       setTimeout(checkHealth, 2000); // Start checking after 2 seconds
     });
 
+    // Give the server a bit more time to fully initialize all endpoints
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
     // Create MCP client transport
     transport = new StreamableHTTPClientTransport(new URL(`${routerUrl}/mcp`));
 
@@ -81,8 +84,34 @@ describe("MCP Router Server", () => {
       version: "1.0.0",
     });
 
-    // Connect to the MCP router
-    await client.connect(transport);
+    // Connect to the MCP router with retry logic
+    const maxConnectRetries = 3;
+    let connected = false;
+    let lastError: Error | undefined;
+
+    for (let i = 0; i < maxConnectRetries; i++) {
+      try {
+        await client.connect(transport);
+
+        connected = true;
+
+        break; // Connection successful
+      } catch (error: unknown) {
+        lastError = error as Error;
+
+        console.error(`Connection attempt ${i + 1} failed:`, error);
+
+        if (i < maxConnectRetries - 1) {
+          console.log("Retrying in 2 seconds...");
+
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+    }
+
+    if (!connected) {
+      throw lastError || new Error("Failed to connect to MCP router after retries");
+    }
   });
 
   afterAll(async () => {
