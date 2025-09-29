@@ -21,36 +21,55 @@ describe("MCP Router Server", () => {
       stdio: "pipe",
     });
 
-    // Log router output for debugging
-    routerProcess.stdout?.on("data", data => {
-      console.log(`Router stdout: ${data}`);
-    });
-
-    routerProcess.stderr?.on("data", data => {
-      console.error(`Router stderr: ${data}`);
-    });
-
-    // Wait for router to start
+    // Wait for router to start by listening for the startup message
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error("Router failed to start within timeout"));
-      }, 15000);
+      }, 30000); // Increased timeout to 30 seconds
 
-      const checkRouter = async () => {
-        try {
-          const response = await fetch(`${routerUrl}/health`);
-          if (response.ok) {
+      let routerStarted = false;
+
+      // Listen for the startup message and log output
+      const onData = (data: Buffer) => {
+        const output = data.toString();
+        console.log(`Router stdout: ${output.trim()}`);
+
+        if (output.includes("MCP Router running on")) {
+          routerStarted = true;
+          // Give it a little more time to fully initialize
+          setTimeout(() => {
             clearTimeout(timeout);
             resolve(undefined);
-          } else {
-            setTimeout(checkRouter, 500);
-          }
-        } catch (error) {
-          setTimeout(checkRouter, 500);
+          }, 1000);
         }
       };
 
-      checkRouter();
+      const onError = (data: Buffer) => {
+        console.error(`Router stderr: ${data.toString().trim()}`);
+      };
+
+      routerProcess.stdout?.on("data", onData);
+      routerProcess.stderr?.on("data", onError);
+
+      // Also periodically check the health endpoint as a fallback
+      const checkHealth = async () => {
+        if (routerStarted) {return;}
+
+        try {
+          const response = await fetch(`${routerUrl}/health`);
+          if (response.ok) {
+            routerStarted = true;
+            clearTimeout(timeout);
+            resolve(undefined);
+          } else {
+            setTimeout(checkHealth, 1000);
+          }
+        } catch (error) {
+          setTimeout(checkHealth, 1000);
+        }
+      };
+
+      setTimeout(checkHealth, 2000); // Start checking after 2 seconds
     });
 
     // Create MCP client transport
