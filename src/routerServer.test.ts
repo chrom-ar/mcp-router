@@ -10,14 +10,24 @@ describe("MCP Router Server", () => {
   const routerUrl = "http://localhost:4001"; // Use different port for testing
 
   beforeAll(async () => {
+    // Create a minimal, clean environment for the test
+    // Only include essential Node.js variables, not the full process.env
+    // This prevents GitHub Actions env vars from interfering
+    const cleanEnv: Record<string, string> = {
+      // Essential Node.js variables
+      PATH: process.env.PATH || "",
+      NODE_ENV: "test",
+      // Router-specific configuration
+      ROUTER_PORT: "4001", // Use port 4001 for testing
+      ROUTER_NAME: "mcp-router-test",
+      ROUTER_VERSION: "1.0.0-test",
+      AUTH_ENABLED: "false", // Disable authentication for tests
+      // Explicitly disable database to avoid connection issues in CI
+      DATABASE_URL: "", // Empty string to ensure no DB connection
+    };
+
     routerProcess = spawn("node", ["dist/index.js"], {
-      env: {
-        ...process.env,
-        ROUTER_PORT: "4001", // Use port 4001 for testing
-        ROUTER_NAME: "mcp-router-test",
-        ROUTER_VERSION: "1.0.0-test",
-        AUTH_ENABLED: "false", // Disable authentication for tests
-      },
+      env: cleanEnv,
       stdio: "pipe",
     });
 
@@ -72,53 +82,18 @@ describe("MCP Router Server", () => {
       setTimeout(checkHealth, 2000); // Start checking after 2 seconds
     });
 
-    // Give the server a bit more time to fully initialize all endpoints
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Give the server a moment to fully initialize all endpoints
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // Connect to the MCP router with retry logic
-    const maxConnectRetries = 3;
-    let connected = false;
-    let lastError: Error | undefined;
+    // Create MCP client transport and connect
+    transport = new StreamableHTTPClientTransport(new URL(`${routerUrl}/mcp`));
 
-    for (let i = 0; i < maxConnectRetries; i++) {
-      try {
-        // Create new transport and client for each attempt to avoid "already started" error
-        transport = new StreamableHTTPClientTransport(new URL(`${routerUrl}/mcp`));
+    client = new Client({
+      name: "mcp-router-client-test",
+      version: "1.0.0",
+    });
 
-        client = new Client({
-          name: "mcp-router-client-test",
-          version: "1.0.0",
-        });
-
-        await client.connect(transport);
-
-        connected = true;
-
-        break; // Connection successful
-      } catch (error: unknown) {
-        lastError = error as Error;
-        console.error(`Connection attempt ${i + 1} failed:`, error);
-
-        // Clean up failed client/transport
-        if (client) {
-          try {
-            await client.close();
-          } catch {
-            // Ignore cleanup errors
-          }
-        }
-
-        if (i < maxConnectRetries - 1) {
-          console.log("Retrying in 2 seconds...");
-
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-      }
-    }
-
-    if (!connected) {
-      throw lastError || new Error("Failed to connect to MCP router after retries");
-    }
+    await client.connect(transport);
   });
 
   afterAll(async () => {
