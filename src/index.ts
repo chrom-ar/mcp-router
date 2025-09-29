@@ -20,8 +20,10 @@ import { SyncService, SyncEventType } from "./services/syncService.js";
 import type { RouterConfig, McpServerConfig, RouterStats } from "./types/index.js";
 import { registerServer, unregisterServer, formatUptime } from "./utils/serverManagement.js";
 
-// Load environment variables
-dotenv.config();
+// Load environment variables from .env file (unless explicitly disabled for testing)
+if (process.env.SKIP_DOTENV !== "true") {
+  dotenv.config();
+}
 
 // Build configuration with dynamic server registration
 const config: RouterConfig = {

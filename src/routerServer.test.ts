@@ -13,17 +13,20 @@ describe("MCP Router Server", () => {
     // Create a minimal, clean environment for the test
     // Only include essential Node.js variables, not the full process.env
     // This prevents GitHub Actions env vars from interfering
+    // Note: By explicitly setting only these vars, all other env vars (including DATABASE_URL) are NOT passed
     const cleanEnv: Record<string, string> = {
       // Essential Node.js variables
       PATH: process.env.PATH || "",
       NODE_ENV: "test",
+      // Skip loading .env file to prevent inheriting local database config
+      SKIP_DOTENV: "true",
       // Router-specific configuration
       ROUTER_PORT: "4001", // Use port 4001 for testing
       ROUTER_NAME: "mcp-router-test",
       ROUTER_VERSION: "1.0.0-test",
       AUTH_ENABLED: "false", // Disable authentication for tests
-      // Explicitly disable database to avoid connection issues in CI
-      DATABASE_URL: "", // Empty string to ensure no DB connection
+      // Explicitly disable migrations to avoid DB connection attempts
+      RUN_MIGRATIONS: "false",
     };
 
     routerProcess = spawn("node", ["dist/index.js"], {
