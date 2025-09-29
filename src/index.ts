@@ -556,8 +556,12 @@ const main = async () => {
   try {
     const port = config.port || 4000;
 
-    // Initialize database if configured
-    if (process.env.DATABASE_URL || process.env.DB_HOST) {
+    // Initialize database if configured (only if non-empty values provided)
+    const hasValidDatabaseConfig =
+      (process.env.DATABASE_URL && process.env.DATABASE_URL.trim().length > 0) ||
+      (process.env.DB_HOST && process.env.DB_HOST.trim().length > 0);
+
+    if (hasValidDatabaseConfig) {
       try {
         console.log("Initializing database connection...");
 
