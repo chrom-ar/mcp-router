@@ -26,9 +26,15 @@ describe("MCP Router Server", () => {
       ROUTER_PORT: "4001", // Use port 4001 for testing
       ROUTER_NAME: "mcp-router-test",
       ROUTER_VERSION: "1.0.0-test",
+      TOOL_NAME_SEPARATOR: ":",
+      // Explicitly disable all features that could cause issues
       AUTH_ENABLED: "false", // Disable authentication for tests
-      // Explicitly disable migrations to avoid DB connection attempts
-      RUN_MIGRATIONS: "false",
+      DATABASE_URL: "", // Empty string to ensure no DB connection
+      RUN_MIGRATIONS: "false", // Explicitly disable migrations
+      ENABLE_EVENT_LOG: "false",
+      ENABLE_AUDIT_LOG: "false",
+      USER_MANAGEMENT_API: "http://localhost:9999", // Dummy URL that won't be used
+      USER_MANAGEMENT_API_KEY: "test_key_not_used", // Dummy key to prevent initialization error
     };
 
     routerProcess = spawn("node", ["dist/index.js"], {
@@ -88,7 +94,8 @@ describe("MCP Router Server", () => {
     });
 
     // Give the server extra time to fully initialize (especially important in CI)
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // GitHub Actions might be slower and need more time for the HTTP server to be ready
+    await new Promise(resolve => setTimeout(resolve, 5000));
 
     // Create MCP client transport and connect
     transport = new StreamableHTTPClientTransport(new URL(`${routerUrl}/mcp`));
