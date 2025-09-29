@@ -1,5 +1,5 @@
 import { spawn, ChildProcess } from "child_process";
-import { describe, test, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
@@ -15,8 +15,10 @@ describe("MCP Router Server", () => {
     // This prevents GitHub Actions env vars from interfering
     // Note: By explicitly setting only these vars, all other env vars (including DATABASE_URL) are NOT passed
     const cleanEnv: Record<string, string> = {
-      // Essential Node.js variables
+      // Essential Node.js and system variables
       PATH: process.env.PATH || "",
+      HOME: process.env.HOME || "",
+      USER: process.env.USER || "",
       NODE_ENV: "test",
       // Skip loading .env file to prevent inheriting local database config
       SKIP_DOTENV: "true",
@@ -85,8 +87,8 @@ describe("MCP Router Server", () => {
       setTimeout(checkHealth, 2000); // Start checking after 2 seconds
     });
 
-    // Give the server a moment to fully initialize all endpoints
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Give the server extra time to fully initialize (especially important in CI)
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     // Create MCP client transport and connect
     transport = new StreamableHTTPClientTransport(new URL(`${routerUrl}/mcp`));
@@ -96,8 +98,16 @@ describe("MCP Router Server", () => {
       version: "1.0.0",
     });
 
-    await client.connect(transport);
-  });
+    try {
+      await client.connect(transport);
+    } catch (error: unknown) {
+      console.error("Failed to connect MCP client:", error);
+      console.error("Router may not be fully initialized. Stdout/stderr should be visible above.");
+      // Clean up and rethrow
+      routerProcess.kill("SIGKILL");
+      throw error instanceof Error ? error : new Error("Failed to connect MCP client");
+    }
+  }, 60000); // 60 second timeout for beforeAll in CI
 
   afterAll(async () => {
     // Clean up
