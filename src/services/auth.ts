@@ -1,17 +1,21 @@
 import { Request, Response, NextFunction } from "express";
 
-export interface ValidationResponse {
+interface ValidationResponse {
   valid: boolean;
   userId?: string;
   email?: string;
   error?: string;
 }
 
-export interface AuthConfig {
+interface AuthConfig {
   enabled: boolean;
   userManagementApi: string;
   skipPaths?: string[];
 }
+
+const headers = {
+  "Content-Type": "application/json",
+};
 
 export const getAuthConfig = (): AuthConfig => {
   return {
@@ -28,9 +32,7 @@ export const validateApiKey = async (
   try {
     const response = await fetch(`${userManagementApi}/validate`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify({ apiKey }),
     });
 
@@ -123,10 +125,11 @@ export const authMiddleware = (authConfig: AuthConfig) => {
         apiKey?: string;
       };
     }
+
     (req as RequestWithUser).user = {
       userId: validation.userId,
       email: validation.email,
-      apiKey: apiKey.substring(0, 8) + "...",
+      apiKey,
     };
 
     next();

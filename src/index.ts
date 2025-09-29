@@ -2,6 +2,7 @@
 
 import express, { Request, Response } from "express";
 import { z } from "zod";
+
 import dotenv from "dotenv";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -535,6 +536,19 @@ app.delete("/register/:serverName", async (req: Request, res: Response) => {
       error: `Error unregistering server: ${error instanceof Error ? error.message : "Unknown error"}`,
     });
   }
+});
+
+// 404 handler - must be last
+app.use((req: Request, res: Response) => {
+  const user = getUserFromRequest(req);
+
+  console.log(`404 - ${req.method} ${req.path} - User: ${user?.email || 'anonymous'} - IP: ${req.ip}`);
+
+  res.status(404).json({
+    error: "Not Found",
+    path: req.path,
+    method: req.method,
+  });
 });
 
 // Main function to start the router

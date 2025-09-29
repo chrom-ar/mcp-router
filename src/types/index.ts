@@ -1,6 +1,5 @@
 import { ZodRawShape } from "zod";
 
-// Basic tool interface (matching MCP SDK Tool type)
 export interface Tool {
   name: string;
   description?: string;
@@ -11,7 +10,6 @@ export interface Tool {
   };
 }
 
-// Configuration for a single MCP server
 export interface McpServerConfig {
   id: string;
   name: string;
@@ -23,10 +21,8 @@ export interface McpServerConfig {
   autoReconnect?: boolean; // Whether to automatically reconnect on ping failures
 }
 
-// Input configuration for creating/updating servers (id is optional/generated)
 export type McpServerConfigInput = Omit<McpServerConfig, "id"> & { id?: string; };
 
-// Router configuration
 export interface RouterConfig {
   servers: McpServerConfig[];
   port?: number;
@@ -35,7 +31,6 @@ export interface RouterConfig {
   toolNameSeparator?: string; // Used to separate server name from tool name (e.g., "server:tool")
 }
 
-// Tool handler types - matches MCP SDK's CallToolResult
 export type ToolHandlerResult = {
   content: Array<{
     type: string;
@@ -50,7 +45,6 @@ export type ToolHandlerResult = {
 
 export type ToolHandlerArgs = Record<string, unknown>;
 
-// Aggregated tool with server information
 export interface AggregatedTool {
   name: string;
   description: string;
@@ -59,7 +53,6 @@ export interface AggregatedTool {
   handler: (args: ToolHandlerArgs, extra?: unknown) => Promise<ToolHandlerResult>;
 }
 
-// Server connection status
 export interface ServerStatus {
   name: string;
   url: string;
@@ -69,7 +62,6 @@ export interface ServerStatus {
   toolsCount: number;
 }
 
-// Router stats
 export interface RouterStats {
   totalServers: number;
   connectedServers: number;
@@ -78,4 +70,3 @@ export interface RouterStats {
   requestCount: number;
   errorCount: number;
 }
-

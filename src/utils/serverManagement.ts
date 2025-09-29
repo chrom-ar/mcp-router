@@ -1,9 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
+import { jsonSchemaToZodShape, type JsonSchema } from "./schemaTransform.js";
 import { ClientManager } from "../services/clientManager.js";
 import { SyncService, SyncEventType } from "../services/syncService.js";
 import type { McpServerConfig, RouterConfig, RouterStats } from "../types/index.js";
-import { jsonSchemaToZodShape, type JsonSchema } from "./schemaTransform.js";
 
 const registeredTools = new Set<string>();
 
@@ -21,7 +21,6 @@ export const unregisterToolsFromMcpServer = (
 
   toolsToRemove.forEach(toolName => {
     registeredTools.delete(toolName);
-    console.log(`  Removed tool: ${toolName}`);
   });
 
   return toolsToRemove;
@@ -37,7 +36,6 @@ export const registerToolsWithMcpServer = async (
   if (tools) {
     for (const tool of tools) {
       if (registeredTools.has(tool.name)) {
-        console.log(`Tool ${tool.name} already registered, skipping...`);
         continue;
       }
 
@@ -56,7 +54,39 @@ export const registerToolsWithMcpServer = async (
           // In multi-pod setups, we can't rely on local state
           // The tool handler is already bound to the correct server
           // If the tool exists, it means it's registered and available
-          return await tool.handler(args, extra);
+          const result = await tool.handler(args, extra) as any;
+
+          // Clean up models_metrics from the response before returning
+          if (result?.content?.[0]?.type === 'text' && typeof result.content[0].text === 'string') {
+            try {
+              const responseData = JSON.parse(result.content[0].text);
+
+              if (responseData.models_metrics) {
+                delete responseData.models_metrics;
+
+                result.content[0].text = JSON.stringify(responseData);
+              }
+            } catch (parseError: unknown) {
+              console.error(`Failed to parse response for cleanup:`, parseError);
+            }
+          }
+
+          // Also clean up structuredContent if present
+          if (result?.structuredContent?.result && typeof result.structuredContent.result === 'string') {
+            try {
+              const structuredData = JSON.parse(result.structuredContent.result);
+
+              if (structuredData.models_metrics) {
+                delete structuredData.models_metrics;
+
+                result.structuredContent.result = JSON.stringify(structuredData);
+              }
+            } catch (parseError: unknown) {
+              console.error(`Failed to parse response for cleanup:`, parseError);
+            }
+          }
+
+          return result;
         },
       );
 
@@ -109,7 +139,9 @@ export const registerServer = async (
     // Validate URL format
     try {
       new URL(serverConfig.url.trim());
-    } catch {
+    } catch (error: unknown) {
+      console.error(`Invalid URL format for ${serverConfig.url}:`, error);
+
       return {
         success: false,
         message: "Server URL must be a valid URL",
@@ -120,6 +152,7 @@ export const registerServer = async (
     // Normalize inputs
     serverConfig.name = serverConfig.name.trim();
     serverConfig.url = serverConfig.url.trim();
+
     const existingServers = clientManager.getServerStatuses();
     const existingIndex = config.servers.findIndex(s => s.name === serverConfig.name);
     const existingServer = existingServers.find(s => s.name === serverConfig.name);
@@ -128,13 +161,34 @@ export const registerServer = async (
     // Validate server name and URL consistency
     if (isUpdate && existingIndex >= 0) {
       const currentConfig = config.servers[existingIndex];
+
       if (currentConfig.url !== serverConfig.url) {
         return {
           success: false,
-          message: `Server name "${serverConfig.name}" is already registered with URL "${currentConfig.url}". Cannot register with different URL "${serverConfig.url}".`,
+          message: `Server "${serverConfig.name}" is already registered with a different URL. Current: ${currentConfig.url}, Attempted: ${serverConfig.url}. Please unregister the existing server first or use a different name.`,
           error: "Name/URL conflict",
         };
       }
+
+      // Server already exists with the same URL
+      const serverStatus = existingServer;
+
+      if (serverStatus && serverStatus.connected) {
+        // Already connected - just return success without re-registering tools
+        const routerStats = clientManager.getStats();
+
+        return {
+          success: true,
+          message: `Server "${serverConfig.name}" is already registered and connected. ${serverStatus.toolsCount || 0} tools available.`,
+          server: serverConfig,
+          stats: {
+            totalServers: routerStats.totalServers,
+            connectedServers: routerStats.connectedServers,
+            totalTools: routerStats.totalTools,
+          },
+        };
+      }
+      // Server exists but is disconnected - will reconnect below
     }
 
     if (existingIndex >= 0) {
@@ -143,12 +197,9 @@ export const registerServer = async (
       config.servers.push(serverConfig);
     }
 
-    const toolsRemoved = unregisterToolsFromMcpServer(serverConfig.name);
-
-    if (toolsRemoved.length > 0) {
-      console.log(`Cleared ${toolsRemoved.length} existing tools for server ${serverConfig.name}`);
-    }
-
+    // For updates, we might need to reconnect if disconnected
+    // But we should NOT unregister tools as they're still registered with the MCP server
+    // The registeredTools Set tracks what's registered with the MCP server
     await clientManager.connectToServer(serverConfig);
 
     // Only register tools if the server is actually connected
@@ -156,20 +207,32 @@ export const registerServer = async (
     const serverStatus = serverStatuses.find(s => s.name === serverConfig.name);
 
     if (serverStatus && serverStatus.connected) {
+      // Register tools - the function already checks if tools are registered
+      // via the registeredTools Set, so it won't try to register duplicates
       await registerToolsWithMcpServer(serverConfig, clientManager, server);
-      console.log(`Registered tools for connected server: ${serverConfig.name}`);
-    } else {
-      console.log(`Server ${serverConfig.name} is not connected, skipping tool registration`);
     }
 
     const routerStats = clientManager.getStats();
+
     stats.totalServers = routerStats.totalServers;
     stats.connectedServers = routerStats.connectedServers;
     stats.totalTools = routerStats.totalTools;
 
-    const action = isUpdate ? "Updated" : "Registered";
+    let action: string;
+    let message: string;
 
-    console.log(`${action} server: ${serverConfig.name}`);
+    if (isUpdate) {
+      if (existingServer && !existingServer.connected) {
+        action = "Reconnected";
+        message = `Successfully reconnected to server "${serverConfig.name}". ${serverStatus?.toolsCount || 0} tools available.`;
+      } else {
+        action = "Updated";
+        message = `Successfully updated server "${serverConfig.name}". ${serverStatus?.toolsCount || 0} tools available.`;
+      }
+    } else {
+      action = "Registered";
+      message = `Successfully registered new server "${serverConfig.name}". ${serverStatus?.toolsCount || 0} tools available.`;
+    }
 
     // Publish sync event for other instances
     if (syncService) {
@@ -181,7 +244,7 @@ export const registerServer = async (
 
     return {
       success: true,
-      message: `Successfully ${action.toLowerCase()} server: ${serverConfig.name}`,
+      message,
       server: serverConfig,
       stats: {
         totalServers: stats.totalServers,
@@ -224,9 +287,6 @@ export const unregisterServer = async (
       };
     }
 
-    const toolsRemoved = unregisterToolsFromMcpServer(serverName);
-    console.log(`Removed ${toolsRemoved.length} tools from server ${serverName}`);
-
     if (serverIndex !== -1) {
       config.servers.splice(serverIndex, 1);
     }
@@ -237,8 +297,6 @@ export const unregisterServer = async (
     stats.totalServers = routerStats.totalServers;
     stats.connectedServers = routerStats.connectedServers;
     stats.totalTools = routerStats.totalTools;
-
-    console.log(`Unregistered server: ${serverName}`);
 
     // Publish sync event for other instances
     if (syncService) {

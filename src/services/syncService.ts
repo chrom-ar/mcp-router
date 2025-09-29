@@ -95,12 +95,11 @@ export class SyncService {
       );
 
       if (result.rows.length === 0) {
-        console.log("No servers found in database during sync");
+        console.log("No servers in DB");
 
         return;
       }
 
-      console.log(`Syncing ${result.rows.length} servers from database`);
       const existingServers = this.clientManager.getServerStatuses();
       const newServersFound: string[] = [];
       const reconnectedServers: string[] = [];
@@ -119,7 +118,8 @@ export class SyncService {
         if (!serverStatus) {
           // New server found in database that we don't have locally
           newServersFound.push(serverConfig.name);
-          console.log(`Found new server in database: ${serverConfig.name} at ${serverConfig.url}`);
+
+          console.log(`Registering server: ${serverConfig.name} at ${serverConfig.url}`);
 
           try {
             await this.clientManager.connectToServer(serverConfig);
@@ -129,16 +129,15 @@ export class SyncService {
             const newServerStatus = updatedStatuses.find(s => s.name === serverConfig.name);
 
             if (newServerStatus && newServerStatus.connected) {
-              console.log(`Successfully connected to ${serverConfig.name}`);
-
               if (this.mcpServer) {
                 const tools = await this.clientManager.buildServerTools(serverConfig);
 
                 if (tools && tools.length > 0) {
                   await registerToolsWithMcpServer(serverConfig, this.clientManager, this.mcpServer);
-                  console.log(`Registered ${tools.length} tools for new server: ${serverConfig.name}`);
+
+                  console.log(`Connected to ${serverConfig.name}: ${tools.length} tools available`);
                 } else {
-                  console.log(`Server ${serverConfig.name} connected but has no tools`);
+                  console.log(`Connected to ${serverConfig.name}: no tools available`);
                 }
               } else {
                 console.log("Warning: mcpServer not available for tool registration");
@@ -247,8 +246,10 @@ export class SyncService {
   }
 
   private async processEvent(event: SyncEvent): Promise<boolean> {
-    console.log(`Processing sync event: ${event.event_type} from ${event.instance_id}`);
-    console.log("Event data:", JSON.stringify(event.event_data, null, 2));
+    if (event.event_type === SyncEventType.SERVER_REGISTERED ||
+        event.event_type === SyncEventType.SERVER_UNREGISTERED) {
+      console.log(`Processing sync event: ${event.event_type} - ${(event.event_data as any).name || 'unknown'}`);
+    }
 
     try {
       switch (event.event_type) {
@@ -267,10 +268,12 @@ export class SyncService {
 
       default:
         console.warn(`Unknown sync event type: ${event.event_type}`);
+
         return true; // Mark unknown events as processed to avoid infinite loop
       }
     } catch (error: unknown) {
       console.error(`Failed to process sync event ${event.event_type}:`, error);
+
       return false; // Don't mark as processed if there was an error
     }
   }
@@ -280,7 +283,7 @@ export class SyncService {
     const exists = existingServers.some(s => s.name === config.name);
 
     if (!exists) {
-      console.log(`Syncing new server registration: ${config.name} from ${config.url}`);
+      console.log(`Syncing server registration: ${config.name} from ${config.url}`);
 
       try {
         await this.clientManager.connectToServer(config);
@@ -289,16 +292,14 @@ export class SyncService {
         const serverStatus = serverStatuses.find(s => s.name === config.name);
 
         if (serverStatus && serverStatus.connected && this.mcpServer) {
-          console.log(`Registering tools for synced server: ${config.name}`);
-
           const tools = await this.clientManager.buildServerTools(config);
 
           if (tools && tools.length > 0) {
             await registerToolsWithMcpServer(config, this.clientManager, this.mcpServer);
 
-            console.log(`Registered ${tools.length} tools for synced server: ${config.name}`);
+            console.log(`Server ${config.name} synced: ${tools.length} tools registered`);
           } else {
-            console.log(`Server ${config.name} connected but has no tools available`);
+            console.log(`Server ${config.name} synced: no tools available`);
           }
         } else {
           console.log(`Server ${config.name} sync failed - not connected, skipping tool registration`);
@@ -388,8 +389,18 @@ export class SyncService {
          RETURNING id`,
       );
 
-      if (result.rowCount > 0) {
-        console.log(`Cleaned up ${result.rowCount} old sync events`);
+      const recentResult = await this.database.query(
+        `DELETE FROM sync_events
+         WHERE created_at < NOW() - INTERVAL '5 minutes'
+         AND processed_by IS NOT NULL
+         AND array_length(processed_by, 1) > 0
+         RETURNING id`,
+      );
+
+      const totalCleaned = (result.rowCount || 0) + (recentResult.rowCount || 0);
+
+      if (totalCleaned > 0) {
+        console.log(`Cleaned up ${totalCleaned} old sync events`);
       }
     } catch (error: unknown) {
       console.error("Failed to cleanup old sync events:", error);
