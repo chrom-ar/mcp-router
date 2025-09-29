@@ -16,7 +16,7 @@ import { initDatabaseFromEnv } from "./services/database.js";
 import { EventLogger } from "./services/eventLogger.js";
 import { MigrationRunner } from "./services/migrationRunner.js";
 import { runWithContext } from "./services/requestContext.js";
-import { SyncService, SyncEventType } from "./services/syncService.js";
+import { SyncService } from "./services/syncService.js";
 import type { RouterConfig, McpServerConfig, RouterStats } from "./types/index.js";
 import { registerServer, unregisterServer, formatUptime } from "./utils/serverManagement.js";
 
