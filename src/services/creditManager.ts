@@ -50,7 +50,7 @@ export class CreditManager {
     toolName: string,
     toolArgs: Record<string, unknown>,
     callToolFn: (toolName: string, args: Record<string, unknown>) => Promise<Record<string, unknown>>,
-    hasQuoteTool: boolean
+    hasQuoteTool: boolean,
   ): Promise<QuoteResult | null> {
     if (!hasQuoteTool) {
       return null;
@@ -59,7 +59,7 @@ export class CreditManager {
     try {
       const quoteToolName = `${serverName}:quote`;
       const quoteArgs = {
-        tool_name: toolName.replace(`${serverName}:`, ''),
+        tool_name: toolName.replace(`${serverName}:`, ""),
         tool_args: toolArgs,
       };
 
@@ -90,7 +90,7 @@ export class CreditManager {
     service: string,
     model?: string,
     inputTokens: number = 0,
-    outputTokens: number = 0
+    outputTokens: number = 0,
   ): Promise<QuotaCheckResult> {
     try {
       const requestBody = {
@@ -132,7 +132,7 @@ export class CreditManager {
     model: string | undefined,
     inputTokens: number,
     outputTokens: number,
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
   ): Promise<UsageTrackResult> {
     try {
       const response = await fetch(`${this.userApiUrl}/usage/track`, {
@@ -164,7 +164,7 @@ export class CreditManager {
 
       return { success: true, ...data };
     } catch (error: unknown) {
-      console.error(`[CREDIT] Error tracking usage:`, error);
+      console.error("[CREDIT] Error tracking usage:", error);
 
       return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
     }
@@ -199,7 +199,7 @@ export class CreditManager {
     toolName: string,
     toolArgs: Record<string, unknown>,
     callToolFn: (toolName: string, args: Record<string, unknown>) => Promise<Record<string, unknown>>,
-    hasQuoteTool: boolean
+    hasQuoteTool: boolean,
   ): Promise<Record<string, unknown>> {
     const context = getRequestContext();
 
@@ -218,7 +218,7 @@ export class CreditManager {
         toolName,
         toolArgs,
         callToolFn,
-        context
+        context,
       );
     }
 
@@ -229,7 +229,7 @@ export class CreditManager {
       toolArgs,
       callToolFn,
       context,
-      quoteInfo
+      quoteInfo,
     );
   }
 
@@ -242,7 +242,7 @@ export class CreditManager {
     toolName: string,
     toolArgs: Record<string, unknown>,
     callToolFn: (toolName: string, args: Record<string, unknown>) => Promise<Record<string, unknown>>,
-    hasQuoteTool: boolean
+    hasQuoteTool: boolean,
   ): Promise<{
     hasQuoteTool: boolean;
     inputTokens: number;
@@ -276,12 +276,12 @@ export class CreditManager {
     toolName: string,
     toolArgs: Record<string, unknown>,
     callToolFn: (toolName: string, args: Record<string, unknown>) => Promise<Record<string, unknown>>,
-    context: { apiKey?: string; userId?: string; userEmail?: string } | undefined
+    context: { apiKey?: string; userId?: string; userEmail?: string } | undefined,
   ): Promise<Record<string, unknown>> {
     const isValid = context?.apiKey ? await this.validateApiKey(context.apiKey) : false;
 
     if (!isValid) {
-      console.error(`[CREDIT] API key validation failed for user ${context?.userEmail || context?.userId || 'unknown'}`);
+      console.error(`[CREDIT] API key validation failed for user ${context?.userEmail || context?.userId || "unknown"}`);
 
       throw new Error("Invalid API key");
     }
@@ -299,13 +299,13 @@ export class CreditManager {
       inputTokens: number;
       outputTokens: number;
       model?: string;
-    }
+    },
   ): Promise<Record<string, unknown>> {
     await this.verifySufficientCredits(
       context,
       serverName,
       toolName,
-      quoteInfo
+      quoteInfo,
     );
 
     const startTime = Date.now();
@@ -314,7 +314,7 @@ export class CreditManager {
     const duration = Date.now() - startTime;
 
     await this.trackUsage(
-      context?.apiKey || '',
+      context?.apiKey || "",
       serverName,
       actualMetrics.model,
       actualMetrics.inputTokens,
@@ -327,7 +327,7 @@ export class CreditManager {
         userEmail: context?.userEmail,
         quotedInputTokens: quoteInfo.inputTokens,
         quotedOutputTokens: quoteInfo.outputTokens,
-      }
+      },
     );
 
     return result;
@@ -341,24 +341,24 @@ export class CreditManager {
       inputTokens: number;
       outputTokens: number;
       model?: string;
-    }
+    },
   ): Promise<void> {
     const creditCheck = await this.checkCredits(
-      context?.apiKey || '',
+      context?.apiKey || "",
       serverName,
       quoteInfo.model,
       quoteInfo.inputTokens,
-      quoteInfo.outputTokens
+      quoteInfo.outputTokens,
     );
 
     if (!creditCheck.allowed) {
       console.error(
         `[CREDIT] Insufficient credits for ${context?.userEmail || context?.userId} on ${serverName}:${toolName} - ` +
-        `Daily: ${creditCheck.remainingDaily}, Monthly: ${creditCheck.remainingMonthly}`
+        `Daily: ${creditCheck.remainingDaily}, Monthly: ${creditCheck.remainingMonthly}`,
       );
 
       throw new Error(
-        `Insufficient credits. Daily remaining: ${creditCheck.remainingDaily}, Monthly remaining: ${creditCheck.remainingMonthly}`
+        `Insufficient credits. Daily remaining: ${creditCheck.remainingDaily}, Monthly remaining: ${creditCheck.remainingMonthly}`,
       );
     }
   }
@@ -371,7 +371,7 @@ export class CreditManager {
       model?: string;
     },
     serverName: string,
-    toolName: string
+    toolName: string,
   ): {
     inputTokens: number;
     outputTokens: number;
@@ -408,13 +408,13 @@ export class CreditManager {
             console.log(
               `[CREDIT] Token mismatch for ${serverName}:${toolName}: ` +
               `actual(${actualInputTokens}/${actualOutputTokens}) vs ` +
-              `quoted(${quoteInfo.inputTokens}/${quoteInfo.outputTokens})`
+              `quoted(${quoteInfo.inputTokens}/${quoteInfo.outputTokens})`,
             );
           }
         }
       }
     } catch (parseError: unknown) {
-      console.error(`[CREDIT] Failed to parse actual metrics from response:`, parseError);
+      console.error("[CREDIT] Failed to parse actual metrics from response:", parseError);
     }
 
     return {

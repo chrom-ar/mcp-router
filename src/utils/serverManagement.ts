@@ -54,10 +54,10 @@ export const registerToolsWithMcpServer = async (
           // In multi-pod setups, we can't rely on local state
           // The tool handler is already bound to the correct server
           // If the tool exists, it means it's registered and available
-          const result = await tool.handler(args, extra) as any;
+          const result = await tool.handler(args, extra) as { content?: Array<{ type?: string; text?: string }> };
 
           // Clean up models_metrics from the response before returning
-          if (result?.content?.[0]?.type === 'text' && typeof result.content[0].text === 'string') {
+          if (result?.content?.[0]?.type === "text" && typeof result.content[0].text === "string") {
             try {
               const responseData = JSON.parse(result.content[0].text);
 
@@ -67,22 +67,24 @@ export const registerToolsWithMcpServer = async (
                 result.content[0].text = JSON.stringify(responseData);
               }
             } catch (parseError: unknown) {
-              console.error(`Failed to parse response for cleanup:`, parseError);
+              console.error("Failed to parse response for cleanup:", parseError);
             }
           }
 
           // Also clean up structuredContent if present
-          if (result?.structuredContent?.result && typeof result.structuredContent.result === 'string') {
+          const resultWithStructured = result as { structuredContent?: { result?: string } };
+
+          if (resultWithStructured?.structuredContent?.result && typeof resultWithStructured.structuredContent.result === "string") {
             try {
-              const structuredData = JSON.parse(result.structuredContent.result);
+              const structuredData = JSON.parse(resultWithStructured.structuredContent.result);
 
               if (structuredData.models_metrics) {
                 delete structuredData.models_metrics;
 
-                result.structuredContent.result = JSON.stringify(structuredData);
+                resultWithStructured.structuredContent.result = JSON.stringify(structuredData);
               }
             } catch (parseError: unknown) {
-              console.error(`Failed to parse response for cleanup:`, parseError);
+              console.error("Failed to parse response for cleanup:", parseError);
             }
           }
 

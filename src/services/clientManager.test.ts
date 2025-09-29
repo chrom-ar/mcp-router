@@ -541,10 +541,14 @@ describe("ClientManager", () => {
       await clientManager.connectToServer(mockServerConfig);
 
       // Simulate disconnection
-      const connection = (clientManager as any).connections.get("test-server");
-      connection.status.connected = false;
+      const connection = (clientManager as unknown as { connections: Map<string, { status: { connected: boolean } }> }).connections.get("test-server");
+
+      if (connection) {
+        connection.status.connected = false;
+      }
 
       const hasTool = clientManager.hasServerTool("test-server", "add");
+
       expect(hasTool).toBe(false);
     });
 
@@ -552,7 +556,7 @@ describe("ClientManager", () => {
       // Create a mock server with quote tool
       const mockToolsWithQuote = [
         { name: "add", description: "Add two numbers" },
-        { name: "quote", description: "Get quote for tool usage" }
+        { name: "quote", description: "Get quote for tool usage" },
       ];
 
       const mockClientWithQuote = {

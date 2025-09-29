@@ -256,7 +256,7 @@ export class ClientManager {
     const context = getRequestContext();
 
     if (this.creditManager && context?.apiKey) {
-      const hasQuoteTool = this.hasServerTool(serverName, 'quote');
+      const hasQuoteTool = this.hasServerTool(serverName, "quote");
       const result = await this.creditManager.executeWithCreditCheck(
         serverName,
         actualToolName,
@@ -264,7 +264,7 @@ export class ClientManager {
         async (fullToolName, toolArgs) => {
           return await this._internalCallTool(fullToolName, toolArgs);
         },
-        hasQuoteTool
+        hasQuoteTool,
       );
       return result as ToolHandlerResult;
     }
@@ -390,7 +390,7 @@ export class ClientManager {
       throw new Error(`Server ${serverName} not found`);
     }
 
-    if (connection.transport && typeof connection.transport.close === 'function') {
+    if (connection.transport && typeof connection.transport.close === "function") {
       try {
         await connection.transport.close();
       } catch (error: unknown) {
@@ -443,7 +443,6 @@ export class ClientManager {
   private startPingInterval(): void {
     this.stopPingInterval();
 
-
     this.pingInterval = setInterval(async () => {
       await this.pingAllServers();
     }, this.pingIntervalMs);
@@ -465,7 +464,6 @@ export class ClientManager {
         if (connection.config.autoReconnect !== false && timeSinceLastAttempt > 60000) {
           connection.lastPingTime = new Date();
           connection.reconnectAttempts = (connection.reconnectAttempts || 0) + 1;
-
 
           try {
             await this.reconnectToServer(serverId);
@@ -580,7 +578,6 @@ export class ClientManager {
     await Promise.allSettled(disconnectPromises);
     this.connections.clear();
   }
-
 
   getStats() {
     const connectedServers = Array.from(this.connections.values()).filter(

@@ -542,7 +542,7 @@ app.delete("/register/:serverName", async (req: Request, res: Response) => {
 app.use((req: Request, res: Response) => {
   const user = getUserFromRequest(req);
 
-  console.log(`404 - ${req.method} ${req.path} - User: ${user?.email || 'anonymous'} - IP: ${req.ip}`);
+  console.log(`404 - ${req.method} ${req.path} - User: ${user?.email || "anonymous"} - IP: ${req.ip}`);
 
   res.status(404).json({
     error: "Not Found",

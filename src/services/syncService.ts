@@ -248,7 +248,7 @@ export class SyncService {
   private async processEvent(event: SyncEvent): Promise<boolean> {
     if (event.event_type === SyncEventType.SERVER_REGISTERED ||
         event.event_type === SyncEventType.SERVER_UNREGISTERED) {
-      console.log(`Processing sync event: ${event.event_type} - ${(event.event_data as any).name || 'unknown'}`);
+      console.log(`Processing sync event: ${event.event_type} - ${(event.event_data as { name?: string }).name || "unknown"}`);
     }
 
     try {
