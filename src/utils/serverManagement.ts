@@ -1,11 +1,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 import { jsonSchemaToZodShape, type JsonSchema } from "./schemaTransform.js";
 import { ClientManager } from "../services/clientManager.js";
 import { SyncService, SyncEventType } from "../services/syncService.js";
 import type { McpServerConfig, RouterConfig, RouterStats } from "../types/index.js";
 
-const registeredTools = new Set<string>();
+const registeredTools = new Map<string, RegisteredTool>();
+const toolHandlers = new Map<string, (args: Record<string, unknown>, extra?: unknown) => Promise<unknown>>();
 
 export const unregisterToolsFromMcpServer = (
   serverName: string,
@@ -13,15 +16,22 @@ export const unregisterToolsFromMcpServer = (
   const toolPrefix = `${serverName}:`;
   const toolsToRemove: string[] = [];
 
-  registeredTools.forEach(toolName => {
+  registeredTools.forEach((registeredTool, toolName) => {
     if (toolName.startsWith(toolPrefix)) {
       toolsToRemove.push(toolName);
+      registeredTool.remove();
     }
   });
 
+  // Clean up from our tracking maps
   toolsToRemove.forEach(toolName => {
     registeredTools.delete(toolName);
+    toolHandlers.delete(toolName);
   });
+
+  if (toolsToRemove.length > 0) {
+    console.log(`Removed ${toolsToRemove.length} tools from ${serverName}`);
+  }
 
   return toolsToRemove;
 };
@@ -35,26 +45,49 @@ export const registerToolsWithMcpServer = async (
 
   if (tools) {
     for (const tool of tools) {
-      if (registeredTools.has(tool.name)) {
-        continue;
-      }
-
+      const existingTool = registeredTools.get(tool.name);
       const zodShape = jsonSchemaToZodShape(tool.inputSchema as JsonSchema);
 
-      const mcpServer = server as {
-        tool: (name: string, desc: string, schema: Record<string, unknown>,
-        callback: (args: Record<string, unknown>, extra?: unknown) => Promise<unknown>) => void
-      };
+      // Update the handler in our map (this is looked up dynamically on each call)
+      toolHandlers.set(tool.name, tool.handler);
 
-      mcpServer.tool(
+      if (existingTool) {
+        // Tool already exists - check if schema changed
+        // Compare the source JSON schema, not the Zod objects
+        const existingSchemaStr = JSON.stringify(existingTool.inputSchema?._def);
+        const newSchemaStr = JSON.stringify(zodShape);
+        const schemaChanged = existingSchemaStr !== newSchemaStr;
+
+        if (schemaChanged) {
+          // Schema changed - need to remove and re-register
+          console.log(`Tool ${tool.name} schema changed, re-registering...`);
+          existingTool.remove();
+          registeredTools.delete(tool.name);
+          // Fall through to register as new tool
+        } else {
+          // Tool exists and schema unchanged - handler is already updated in toolHandlers map
+          // No listChanged notification needed since nothing visible changed
+          continue;
+        }
+      }
+
+      // Register new tool or re-register after schema change
+      // The callback uses dynamic lookup from toolHandlers map
+      const registeredTool = server.registerTool(
         tool.name,
-        tool.description || "Tool from registered MCP server",
-        zodShape,
-        async (args: Record<string, unknown>, extra?: unknown) => {
-          // In multi-pod setups, we can't rely on local state
-          // The tool handler is already bound to the correct server
-          // If the tool exists, it means it's registered and available
-          const result = await tool.handler(args, extra) as { content?: Array<{ type?: string; text?: string }> };
+        {
+          description: tool.description || "Tool from registered MCP server",
+          inputSchema: zodShape,
+        },
+        async (args: Record<string, unknown>, extra?: unknown): Promise<CallToolResult> => {
+          // Dynamic handler lookup - always uses the latest handler
+          const currentHandler = toolHandlers.get(tool.name);
+
+          if (!currentHandler) {
+            throw new Error(`Tool handler not found for ${tool.name}`);
+          }
+
+          const result = await currentHandler(args, extra) as CallToolResult;
 
           // Clean up models_metrics from the response before returning
           if (result?.content?.[0]?.type === "text" && typeof result.content[0].text === "string") {
@@ -92,7 +125,7 @@ export const registerToolsWithMcpServer = async (
         },
       );
 
-      registeredTools.add(tool.name);
+      registeredTools.set(tool.name, registeredTool);
     }
   }
 };
@@ -333,7 +366,7 @@ export const Active = (toolName: string): boolean => {
 };
 
 export const getActiveTools = (): Set<string> => {
-  return new Set(registeredTools);
+  return new Set(registeredTools.keys());
 };
 
 export const formatUptime = (ms: number): string => {
