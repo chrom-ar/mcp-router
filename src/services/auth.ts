@@ -21,7 +21,7 @@ export const getAuthConfig = (): AuthConfig => {
   return {
     enabled: process.env.AUTH_ENABLED === "true",
     userManagementApi: process.env.USER_MANAGEMENT_API || "https://users.chrom.ar",
-    skipPaths: process.env.AUTH_SKIP_PATHS?.split(",") || ["/health", "/register", "/unregister"],
+    skipPaths: process.env.AUTH_SKIP_PATHS?.split(",") || ["/health", "/stats", "/register", "/unregister"],
   };
 };
 

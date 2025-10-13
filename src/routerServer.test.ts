@@ -180,6 +180,55 @@ describe.skipIf(process.env.CI)("MCP Router Server", () => {
     expect(configData.toolNameSeparator).toBeDefined();
   });
 
+  test("should get aggregated statistics endpoint with no servers", async () => {
+    const response = await fetch(`${routerUrl}/stats`);
+
+    expect(response.ok).toBe(true);
+
+    const stats = await response.json();
+
+    expect(stats).toBeDefined();
+    expect(typeof stats).toBe("object");
+    expect(Object.keys(stats)).toHaveLength(0);
+  });
+
+  test("should verify no stats tools are exposed in tool list", async () => {
+    // Note: This test verifies that no `:stats` tools appear in the tool list.
+    // Since we don't have any actual MCP servers connected in this test,
+    // we're just verifying that the router doesn't expose any stats tools.
+    // The actual filtering behavior is tested in unit tests in clientManager.test.ts
+    // where we can mock servers with stats tools.
+
+    const toolsResult = await client.callTool({
+      name: "router:list-tools",
+      arguments: {},
+    });
+
+    const toolsData = JSON.parse((toolsResult.content as Array<{ text: string }>)[0].text);
+
+    expect(toolsData.tools).toBeDefined();
+    expect(Array.isArray(toolsData.tools)).toBe(true);
+
+    // Verify no tool ends with ":stats" - stats tools should be filtered
+    const statsTools = toolsData.tools.filter((tool: { name: string }) =>
+      tool.name.endsWith(":stats"),
+    );
+
+    expect(statsTools).toHaveLength(0);
+
+    // Verify the /stats endpoint is accessible and works
+    const statsResponse = await fetch(`${routerUrl}/stats`);
+
+    expect(statsResponse.ok).toBe(true);
+
+    const stats = await statsResponse.json();
+
+    expect(stats).toBeDefined();
+    expect(typeof stats).toBe("object");
+    // With no connected servers, should return empty object
+    expect(Object.keys(stats)).toHaveLength(0);
+  });
+
   test("should have router management tools available", async () => {
     const tools = await client.listTools();
 
@@ -192,16 +241,11 @@ describe.skipIf(process.env.CI)("MCP Router Server", () => {
     // Check for router management tools
     expect(toolNames).toContain("router:list-servers");
     expect(toolNames).toContain("router:reconnect-server");
-    expect(toolNames).toContain("router:stats");
 
     // Verify tool descriptions
     const listServersTool = tools.tools?.find((tool: { name: string; description?: string }) => tool.name === "router:list-servers");
 
     expect(listServersTool?.description).toBe("List all configured MCP servers and their status");
-
-    const statsTool = tools.tools?.find((tool: { name: string; description?: string }) => tool.name === "router:stats");
-
-    expect(statsTool?.description).toBe("Get aggregated statistics from all connected servers that have a stats tool");
   });
 
   test("should list servers successfully", async () => {
@@ -231,32 +275,6 @@ describe.skipIf(process.env.CI)("MCP Router Server", () => {
     expect(typeof parsedResult.summary.totalServers).toBe("number");
     expect(typeof parsedResult.summary.connectedServers).toBe("number");
     expect(typeof parsedResult.summary.totalTools).toBe("number");
-  });
-
-  test("should get router statistics successfully", async () => {
-    const result = await client.callTool({
-      name: "router:stats",
-      arguments: {},
-    });
-
-    expect(result).toBeDefined();
-    expect(result.content).toBeDefined();
-    expect(Array.isArray(result.content)).toBe(true);
-    expect((result.content as Array<{ type: string; text: string }>).length).toBeGreaterThan(0);
-
-    const content = result.content as Array<{ type: string; text: string }>;
-    const resultText = content[0].text;
-    expect(resultText).toBeDefined();
-    expect(typeof resultText).toBe("string");
-
-    // Parse the JSON response to validate structure
-    // router:stats now returns aggregated stats from all servers with stats tools
-    // Since no backend servers are connected in this test, it should return an empty object
-    const stats = JSON.parse(resultText);
-    expect(stats).toBeDefined();
-    expect(typeof stats).toBe("object");
-    // With no connected servers that have stats tools, we expect an empty object
-    expect(Object.keys(stats)).toHaveLength(0);
   });
 
   test("should handle reconnect-server tool with invalid server", async () => {
@@ -341,26 +359,18 @@ describe.skipIf(process.env.CI)("MCP Router Server", () => {
   });
 
   test("should maintain consistent server state across calls", async () => {
-    // Call list-servers multiple times to ensure consistent state
     const results = await Promise.all([
       client.callTool({ name: "router:list-servers", arguments: {} }),
-      client.callTool({ name: "router:stats", arguments: {} }),
       client.callTool({ name: "router:list-servers", arguments: {} }),
     ]);
 
-    expect(results.length).toBe(3);
+    expect(results.length).toBe(2);
 
     const firstListResult = JSON.parse((results[0].content as Array<{ text: string }>)[0].text);
-    const statsResult = JSON.parse((results[1].content as Array<{ text: string }>)[0].text);
-    const secondListResult = JSON.parse((results[2].content as Array<{ text: string }>)[0].text);
+    const secondListResult = JSON.parse((results[1].content as Array<{ text: string }>)[0].text);
 
-    // Server counts should be consistent between list-servers calls
-    // Note: router:stats now returns aggregated stats from connected servers, not router-level stats
     expect(secondListResult.summary.totalServers).toBe(firstListResult.summary.totalServers);
     expect(secondListResult.summary.connectedServers).toBe(firstListResult.summary.connectedServers);
-
-    // Stats result should be an object (aggregated stats from servers)
-    expect(typeof statsResult).toBe("object");
   });
 
   test("should handle malformed MCP requests gracefully", async () => {

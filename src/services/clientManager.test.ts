@@ -582,4 +582,97 @@ describe("ClientManager", () => {
       expect(hasQuote).toBe(true);
     });
   });
+
+  describe("stats tool filtering", () => {
+    test("should filter out stats tools when loading server tools", async () => {
+      const mockToolsWithStats = [
+        {
+          name: "stats",
+          description: "Get server statistics",
+          inputSchema: { type: "object", properties: {} },
+        },
+        {
+          name: "useful-tool",
+          description: "A useful tool",
+          inputSchema: { type: "object", properties: {} },
+        },
+        {
+          name: "another-tool",
+          description: "Another tool",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ];
+
+      mockClient.listTools.mockResolvedValue({ tools: mockToolsWithStats });
+
+      await clientManager.connectToServer(mockServerConfig);
+
+      const allTools = clientManager.getAllTools();
+
+      expect(allTools).toHaveLength(2); // Only 2 tools, stats is filtered out
+      expect(allTools.map(t => t.name)).toEqual(["test-server:useful-tool", "test-server:another-tool"]);
+      expect(allTools.map(t => t.name)).not.toContain("test-server:stats");
+    });
+
+    test("should still be able to call stats tool via getServersWithStatsTool and callServerStatsTool", async () => {
+      const mockToolsWithStats = [
+        {
+          name: "stats",
+          description: "Get server statistics",
+          inputSchema: { type: "object", properties: {} },
+        },
+        {
+          name: "other-tool",
+          description: "Other tool",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ];
+
+      mockClient.listTools.mockResolvedValue({ tools: mockToolsWithStats });
+      mockClient.callTool.mockResolvedValue({
+        content: [{ type: "text", text: JSON.stringify({ requests: 100, errors: 5 }) }],
+      });
+
+      await clientManager.connectToServer(mockServerConfig);
+
+      const serversWithStats = await clientManager.getServersWithStatsTool();
+
+      expect(serversWithStats).toContain("test-server");
+
+      const statsResult = await clientManager.callServerStatsTool("test-server");
+
+      expect(statsResult.content).toHaveLength(1);
+      expect(statsResult.content[0].type).toBe("text");
+
+      if (statsResult.content[0].type === "text" && statsResult.content[0].text) {
+        const statsData = JSON.parse(statsResult.content[0].text);
+
+        expect(statsData).toEqual({ requests: 100, errors: 5 });
+      }
+
+      expect(mockClient.callTool).toHaveBeenCalledWith({
+        name: "stats",
+        arguments: {},
+      });
+    });
+
+    test("should not include servers without stats tool in getServersWithStatsTool", async () => {
+      const mockToolsWithoutStats = [
+        {
+          name: "useful-tool",
+          description: "A useful tool",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ];
+
+      mockClient.listTools.mockResolvedValue({ tools: mockToolsWithoutStats });
+
+      await clientManager.connectToServer(mockServerConfig);
+
+      const serversWithStats = await clientManager.getServersWithStatsTool();
+
+      expect(serversWithStats).not.toContain("test-server");
+      expect(serversWithStats).toHaveLength(0);
+    });
+  });
 });
