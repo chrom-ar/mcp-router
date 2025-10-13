@@ -36,10 +36,12 @@ const config: RouterConfig = {
 
 // Create Express app
 const app = express();
+
 app.use(express.json());
 
 // Setup authentication middleware
 const authConfig = getAuthConfig();
+
 app.use(authMiddleware(authConfig));
 
 // Create MCP server instance
@@ -265,6 +267,7 @@ server.tool(
   reconnectServerSchema.shape as Record<string, z.ZodTypeAny>,
   async args => {
     const typedArgs = args as { serverName: string };
+
     try {
       await clientManager.reconnectToServer(typedArgs.serverName);
 
@@ -382,6 +385,7 @@ app.get("/health", async (req: Request, res: Response) => {
   if (database) {
     try {
       const dbHealth = await database.healthCheck();
+
       databaseStatus = {
         connected: true,
         healthy: dbHealth.healthy,
@@ -408,7 +412,19 @@ app.get("/health", async (req: Request, res: Response) => {
 });
 
 // Stats endpoint - aggregated statistics from all connected servers
+app.options("/stats", (req: Request, res: Response) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  res.status(204).send();
+});
+
 app.get("/stats", async (req: Request, res: Response) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
   try {
     // Get servers that have a stats tool
     const serversWithStats = await clientManager.getServersWithStatsTool();
@@ -421,8 +437,10 @@ app.get("/stats", async (req: Request, res: Response) => {
 
         // Parse the result to extract the actual stats data
         let statsData: unknown;
+
         if (result.content && result.content.length > 0) {
           const firstContent = result.content[0];
+
           if (firstContent.type === "text" && firstContent.text) {
             try {
               statsData = JSON.parse(firstContent.text);
@@ -449,6 +467,7 @@ app.get("/stats", async (req: Request, res: Response) => {
     results.forEach(result => {
       if (result.status === "fulfilled") {
         const { serverName, statsData, error } = result.value as { serverName: string; statsData?: unknown; error?: string };
+
         if (error) {
           aggregatedStats[serverName] = { error };
         } else {
@@ -652,6 +671,7 @@ const main = async () => {
     console.log("Starting MCP Router with dynamic server registration...");
 
     const routerStats = clientManager.getStats();
+
     stats.totalServers = routerStats.totalServers;
     stats.connectedServers = routerStats.connectedServers;
     stats.totalTools = routerStats.totalTools;
