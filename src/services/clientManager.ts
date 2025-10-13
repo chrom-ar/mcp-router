@@ -188,20 +188,23 @@ export class ClientManager {
       const toolsResult = await connection.client.listTools();
 
       if (toolsResult && toolsResult.tools) {
-        const aggregatedTools: AggregatedTool[] = toolsResult.tools.map((tool: { name: string; description?: string; inputSchema: unknown }) => {
-          const aggregatedName = `${serverId}${this.toolNameSeparator}${tool.name}`;
-          const schema: ZodRawShape = {};
+        const aggregatedTools: AggregatedTool[] = toolsResult.tools
+          // Filter out stats tools - they will be accessed via router:stats
+          .filter((tool: { name: string; description?: string; inputSchema: unknown }) => tool.name !== "stats")
+          .map((tool: { name: string; description?: string; inputSchema: unknown }) => {
+            const aggregatedName = `${serverId}${this.toolNameSeparator}${tool.name}`;
+            const schema: ZodRawShape = {};
 
-          return {
-            name: aggregatedName,
-            description: `[${config.name}] ${tool.description}`,
-            schema,
-            inputSchema: tool.inputSchema,
-            handler: async (args: ToolHandlerArgs, extra?: unknown): Promise<ToolHandlerResult> => {
-              return await this.callTool(aggregatedName, args);
-            },
-          };
-        });
+            return {
+              name: aggregatedName,
+              description: `[${config.name}] ${tool.description}`,
+              schema,
+              inputSchema: tool.inputSchema,
+              handler: async (args: ToolHandlerArgs, extra?: unknown): Promise<ToolHandlerResult> => {
+                return await this.callTool(aggregatedName, args);
+              },
+            };
+          });
 
         connection.tools = aggregatedTools;
         connection.status.toolsCount = aggregatedTools.length;
@@ -242,6 +245,54 @@ export class ClientManager {
 
     const fullToolName = `${serverName}${this.toolNameSeparator}${toolName}`;
     return connection.tools.some(tool => tool.name === fullToolName);
+  }
+
+  async getServersWithStatsTool(): Promise<string[]> {
+    const serversWithStats: string[] = [];
+
+    for (const [serverName, connection] of this.connections.entries()) {
+      if (!connection.status.connected || !connection.client) {
+        continue;
+      }
+
+      try {
+        const toolsResult = await connection.client.listTools();
+
+        if (toolsResult && toolsResult.tools) {
+          const hasStats = toolsResult.tools.some((tool: { name: string }) => tool.name === "stats");
+
+          if (hasStats) {
+            serversWithStats.push(serverName);
+          }
+        }
+      } catch (error: unknown) {
+        console.error(`Failed to check tools for ${serverName}:`, error);
+      }
+    }
+
+    return serversWithStats;
+  }
+
+  async callServerStatsTool(serverName: string): Promise<ToolHandlerResult> {
+    const connection = this.connections.get(serverName);
+
+    if (!connection) {
+      throw new Error(`Server ${serverName} not found`);
+    }
+
+    if (!connection.status.connected) {
+      throw new Error(`Server ${serverName} is not connected`);
+    }
+
+    const rawResult = await connection.client.callTool({
+      name: "stats",
+      arguments: {},
+    });
+
+    return {
+      ...rawResult,
+      content: rawResult.content || [],
+    } as ToolHandlerResult;
   }
 
   async callTool(toolName: string, args: ToolHandlerArgs): Promise<ToolHandlerResult> {

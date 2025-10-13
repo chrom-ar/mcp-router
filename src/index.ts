@@ -160,32 +160,71 @@ server.tool(
 
 server.tool(
   "router:stats",
-  "Get router statistics and performance metrics",
+  "Get aggregated statistics from all connected servers that have a stats tool",
   {},
   async () => {
     try {
-      const routerStats = clientManager.getStats();
-      const currentStats = {
-        ...stats,
-        ...routerStats,
-        uptime: Date.now() - stats.uptime,
-        uptimeFormatted: formatUptime(Date.now() - stats.uptime),
-      };
+      // Get servers that have a stats tool
+      const serversWithStats = await clientManager.getServersWithStatsTool();
+      const aggregatedStats: Record<string, unknown> = {};
+
+      // Call stats tool on each server that has it
+      const statsPromises = serversWithStats.map(async serverName => {
+        try {
+          const result = await clientManager.callServerStatsTool(serverName);
+
+          // Parse the result to extract the actual stats data
+          let statsData: unknown;
+          if (result.content && result.content.length > 0) {
+            const firstContent = result.content[0];
+            if (firstContent.type === "text" && firstContent.text) {
+              try {
+                statsData = JSON.parse(firstContent.text);
+              } catch {
+                statsData = firstContent.text;
+              }
+            } else {
+              statsData = firstContent;
+            }
+          }
+
+          return { serverName, statsData };
+        } catch (error: unknown) {
+          return {
+            serverName,
+            error: error instanceof Error ? error.message : "Unknown error",
+          };
+        }
+      });
+
+      const results = await Promise.allSettled(statsPromises);
+
+      // Build the aggregated response
+      results.forEach(result => {
+        if (result.status === "fulfilled") {
+          const { serverName, statsData, error } = result.value as { serverName: string; statsData?: unknown; error?: string };
+          if (error) {
+            aggregatedStats[serverName] = { error };
+          } else {
+            aggregatedStats[serverName] = statsData;
+          }
+        }
+      });
 
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(currentStats, null, 2),
+            text: JSON.stringify(aggregatedStats, null, 2),
           },
         ],
       };
-    } catch (error) {
+    } catch (error: unknown) {
       return {
         content: [
           {
             type: "text",
-            text: `Error getting stats: ${error instanceof Error ? error.message : "Unknown error"}`,
+            text: `Error getting aggregated stats: ${error instanceof Error ? error.message : "Unknown error"}`,
           },
         ],
         isError: true,
@@ -370,7 +409,9 @@ app.post("/mcp", async (req: Request, res: Response) => {
     });
   } catch (error: unknown) {
     stats.errorCount++;
+
     console.error("Error handling MCP request:", error);
+
     if (!res.headersSent) {
       res.status(500).json({
         jsonrpc: "2.0",
@@ -410,6 +451,7 @@ app.delete("/mcp", async (req: Request, res: Response) => {
 // Health check endpoint
 app.get("/health", async (req: Request, res: Response) => {
   const routerStats = clientManager.getStats();
+
   let databaseStatus: { connected: boolean; healthy: boolean; latency?: number } = { connected: false, healthy: false };
 
   if (database) {
@@ -643,7 +685,7 @@ const main = async () => {
       console.log("\n🔧 Router Management Tools:");
       console.log("   - router:list-servers: List all servers and their status");
       console.log("   - router:list-tools: List all available tools from connected servers");
-      console.log("   - router:stats: Get router statistics");
+      console.log("   - router:stats: Get aggregated statistics from all connected servers");
       console.log("   - router:register-server: Register a new MCP server");
       console.log("   - router:unregister-server: Unregister an MCP server");
       console.log("   - router:reconnect-server: Reconnect to a specific server");

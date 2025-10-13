@@ -196,10 +196,12 @@ describe.skipIf(process.env.CI)("MCP Router Server", () => {
 
     // Verify tool descriptions
     const listServersTool = tools.tools?.find((tool: { name: string; description?: string }) => tool.name === "router:list-servers");
+
     expect(listServersTool?.description).toBe("List all configured MCP servers and their status");
 
     const statsTool = tools.tools?.find((tool: { name: string; description?: string }) => tool.name === "router:stats");
-    expect(statsTool?.description).toBe("Get router statistics and performance metrics");
+
+    expect(statsTool?.description).toBe("Get aggregated statistics from all connected servers that have a stats tool");
   });
 
   test("should list servers successfully", async () => {
@@ -248,16 +250,13 @@ describe.skipIf(process.env.CI)("MCP Router Server", () => {
     expect(typeof resultText).toBe("string");
 
     // Parse the JSON response to validate structure
+    // router:stats now returns aggregated stats from all servers with stats tools
+    // Since no backend servers are connected in this test, it should return an empty object
     const stats = JSON.parse(resultText);
     expect(stats).toBeDefined();
-    expect(typeof stats.totalServers).toBe("number");
-    expect(typeof stats.connectedServers).toBe("number");
-    expect(typeof stats.totalTools).toBe("number");
-    expect(typeof stats.uptime).toBe("number");
-    expect(typeof stats.requestCount).toBe("number");
-    expect(typeof stats.errorCount).toBe("number");
-    expect(stats.uptimeFormatted).toBeDefined();
-    expect(typeof stats.uptimeFormatted).toBe("string");
+    expect(typeof stats).toBe("object");
+    // With no connected servers that have stats tools, we expect an empty object
+    expect(Object.keys(stats)).toHaveLength(0);
   });
 
   test("should handle reconnect-server tool with invalid server", async () => {
@@ -355,13 +354,13 @@ describe.skipIf(process.env.CI)("MCP Router Server", () => {
     const statsResult = JSON.parse((results[1].content as Array<{ text: string }>)[0].text);
     const secondListResult = JSON.parse((results[2].content as Array<{ text: string }>)[0].text);
 
-    // Server counts should be consistent
-    expect(firstListResult.summary.totalServers).toBe(statsResult.totalServers);
-    expect(firstListResult.summary.connectedServers).toBe(statsResult.connectedServers);
-    expect(firstListResult.summary.totalTools).toBe(statsResult.totalTools);
-
+    // Server counts should be consistent between list-servers calls
+    // Note: router:stats now returns aggregated stats from connected servers, not router-level stats
     expect(secondListResult.summary.totalServers).toBe(firstListResult.summary.totalServers);
     expect(secondListResult.summary.connectedServers).toBe(firstListResult.summary.connectedServers);
+
+    // Stats result should be an object (aggregated stats from servers)
+    expect(typeof statsResult).toBe("object");
   });
 
   test("should handle malformed MCP requests gracefully", async () => {
