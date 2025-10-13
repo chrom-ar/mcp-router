@@ -59,7 +59,7 @@ describe("Dynamic Tool Management", () => {
     // Verify the tool was registered by checking the server's internal state
     // The McpServer stores tools in a private _registeredTools map
     // We can access it via the server property for testing
-    const registeredTools = (server as any)._registeredTools;
+    const registeredTools = (server as unknown as { _registeredTools: Record<string, { enabled: boolean }> })._registeredTools;
 
     expect(registeredTools["test-server:my-tool"]).toBeDefined();
     expect(registeredTools["test-server:my-tool"].enabled).toBe(true);
@@ -95,7 +95,7 @@ describe("Dynamic Tool Management", () => {
 
     await registerToolsWithMcpServer(serverConfig, clientManager, server);
 
-    let registeredTools = (server as any)._registeredTools;
+    let registeredTools = (server as unknown as { _registeredTools: Record<string, { enabled: boolean }> })._registeredTools;
 
     expect(registeredTools["test-server:my-tool"]).toBeDefined();
 
@@ -121,7 +121,7 @@ describe("Dynamic Tool Management", () => {
     // So our schema comparison may detect a change even when functionally they're the same
     // For now, we accept that tools may be re-registered, which is safe
     // The key point: the handler map was updated, so calls will use the new handler
-    registeredTools = (server as any)._registeredTools;
+    registeredTools = (server as unknown as { _registeredTools: Record<string, { enabled: boolean }> })._registeredTools;
 
     expect(registeredTools["test-server:my-tool"]).toBeDefined();
     expect(registeredTools["test-server:my-tool"].enabled).toBe(true);
@@ -177,7 +177,7 @@ describe("Dynamic Tool Management", () => {
 
     await registerToolsWithMcpServer(serverConfig, clientManager, server);
 
-    const registeredTools = (server as any)._registeredTools;
+    const registeredTools = (server as unknown as { _registeredTools: Record<string, { enabled: boolean; inputSchema: unknown }> })._registeredTools;
 
     expect(registeredTools["test-server:my-tool"]).toBeDefined();
     expect(registeredTools["test-server:my-tool"].enabled).toBe(true);
@@ -213,7 +213,7 @@ describe("Dynamic Tool Management", () => {
 
     await registerToolsWithMcpServer(serverConfig, clientManager, server);
 
-    let registeredTools = (server as any)._registeredTools;
+    let registeredTools = (server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools;
 
     expect(registeredTools["test-server:tool1"]).toBeDefined();
     expect(registeredTools["test-server:tool2"]).toBeDefined();
@@ -224,7 +224,7 @@ describe("Dynamic Tool Management", () => {
     expect(removedTools).toContain("test-server:tool1");
     expect(removedTools).toContain("test-server:tool2");
 
-    registeredTools = (server as any)._registeredTools;
+    registeredTools = (server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools;
 
     expect(registeredTools["test-server:tool1"]).toBeUndefined();
     expect(registeredTools["test-server:tool2"]).toBeUndefined();
@@ -256,7 +256,7 @@ describe("Dynamic Tool Management", () => {
 
     await registerToolsWithMcpServer(serverConfig, clientManager, server);
 
-    const registeredTools = (server as any)._registeredTools;
+    const registeredTools = (server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools;
 
     expect(registeredTools["test-server:tool1"]).toBeDefined();
     expect(registeredTools["test-server:tool2"]).toBeDefined();
