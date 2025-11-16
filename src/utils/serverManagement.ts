@@ -48,18 +48,14 @@ export const registerToolsWithMcpServer = async (
       const existingTool = registeredTools.get(tool.name);
       const zodShape = jsonSchemaToZodShape(tool.inputSchema as JsonSchema);
 
-      // Update the handler in our map (this is looked up dynamically on each call)
       toolHandlers.set(tool.name, tool.handler);
 
       if (existingTool) {
-        // Tool already exists - check if schema changed
-        // Compare the source JSON schema, not the Zod objects
         const existingSchemaStr = JSON.stringify(existingTool.inputSchema?._def);
         const newSchemaStr = JSON.stringify(zodShape);
         const schemaChanged = existingSchemaStr !== newSchemaStr;
 
         if (schemaChanged) {
-          // Schema changed - need to remove and re-register
           console.log(`Tool ${tool.name} schema changed, re-registering...`);
           existingTool.remove();
           registeredTools.delete(tool.name);
@@ -71,8 +67,6 @@ export const registerToolsWithMcpServer = async (
         }
       }
 
-      // Register new tool or re-register after schema change
-      // The callback uses dynamic lookup from toolHandlers map
       const registeredTool = server.registerTool(
         tool.name,
         {
@@ -80,7 +74,6 @@ export const registerToolsWithMcpServer = async (
           inputSchema: zodShape,
         },
         async (args: Record<string, unknown>, extra?: unknown): Promise<CallToolResult> => {
-          // Dynamic handler lookup - always uses the latest handler
           const currentHandler = toolHandlers.get(tool.name);
 
           if (!currentHandler) {
