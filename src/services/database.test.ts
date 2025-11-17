@@ -2,8 +2,23 @@ import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import { Database } from "./database.js";
 import { Pool } from "pg";
 
+const { MockPool } = vi.hoisted(() => {
+  class MockPoolClass {
+    query = vi.fn();
+    connect = vi.fn();
+    end = vi.fn();
+    on = vi.fn();
+    totalCount = 0;
+    idleCount = 0;
+    waitingCount = 0;
+  }
+  return {
+    MockPool: vi.fn<[], Pool>(() => new MockPoolClass() as unknown as Pool),
+  };
+});
+
 vi.mock("pg", () => ({
-  Pool: vi.fn(),
+  Pool: MockPool,
 }));
 
 describe("Database", () => {
@@ -38,7 +53,9 @@ describe("Database", () => {
       waitingCount: 0,
     };
 
-    vi.mocked(Pool).mockImplementation(() => mockPool as unknown as Pool);
+    MockPool.mockImplementation(function() {
+      return mockPool as unknown as Pool;
+    });
 
     database = new Database({
       host: "localhost",

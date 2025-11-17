@@ -73,8 +73,12 @@ describe("ClientManager", () => {
       close: vi.fn().mockResolvedValue(undefined),
     };
 
-    MockedClient.mockImplementation(() => mockClient as unknown as Client);
-    MockedTransport.mockImplementation(() => mockTransport as unknown as StreamableHTTPClientTransport);
+    MockedClient.mockImplementation(function() {
+      return mockClient as unknown as Client;
+    });
+    MockedTransport.mockImplementation(function() {
+      return mockTransport as unknown as StreamableHTTPClientTransport;
+    });
 
     clientManager = new ClientManager(":");
 
@@ -236,8 +240,11 @@ describe("ClientManager", () => {
       onerror: null,
     };
 
-    MockedClient.mockImplementationOnce(() => mockClient as unknown as Client)
-      .mockImplementationOnce(() => mockClient2 as unknown as Client);
+    MockedClient.mockImplementationOnce(function() {
+      return mockClient as unknown as Client;
+    }).mockImplementationOnce(function() {
+      return mockClient2 as unknown as Client;
+    });
 
     await clientManager.connectToServers([mockServerConfig, server2Config]);
 
@@ -277,7 +284,16 @@ describe("ClientManager", () => {
       onerror: null,
     };
 
-    MockedClient.mockImplementationOnce(() => newMockClient as unknown as Client);
+    const newMockTransport = {
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+
+    MockedClient.mockImplementationOnce(function() {
+      return newMockClient as unknown as Client;
+    });
+    MockedTransport.mockImplementationOnce(function() {
+      return newMockTransport as unknown as StreamableHTTPClientTransport;
+    });
 
     await clientManager.reconnectToServer("test-server");
 
@@ -323,8 +339,11 @@ describe("ClientManager", () => {
       close: vi.fn().mockResolvedValue(undefined),
     };
 
-    MockedTransport.mockImplementationOnce(() => mockTransport as unknown as StreamableHTTPClientTransport)
-      .mockImplementationOnce(() => mockTransport2 as unknown as StreamableHTTPClientTransport);
+    MockedTransport.mockImplementationOnce(function() {
+      return mockTransport as unknown as StreamableHTTPClientTransport;
+    }).mockImplementationOnce(function() {
+      return mockTransport2 as unknown as StreamableHTTPClientTransport;
+    });
 
     await clientManager.connectToServers([mockServerConfig, server2Config]);
     await clientManager.disconnectAll();
@@ -468,6 +487,27 @@ describe("ClientManager", () => {
 
     // Disconnect
     await clientManager.disconnectAll();
+
+    // Set up fresh mocks for second connection
+    const secondMockClient = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      listTools: vi.fn().mockResolvedValue({ tools: mockTools }),
+      callTool: vi.fn().mockResolvedValue({ content: [{ type: "text", text: "Mock result" }] }),
+      ping: vi.fn().mockResolvedValue({}),
+      onerror: null,
+    };
+
+    const secondMockTransport = {
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+
+    MockedClient.mockImplementationOnce(function() {
+      return secondMockClient as unknown as Client;
+    });
+    MockedTransport.mockImplementationOnce(function() {
+      return secondMockTransport as unknown as StreamableHTTPClientTransport;
+    });
+
     await clientManager.connectToServers([mockServerConfig]);
 
     const secondStatuses = clientManager.getServerStatuses();
@@ -495,8 +535,11 @@ describe("ClientManager", () => {
       connect: vi.fn().mockRejectedValue(new Error("Connection failed")),
     };
 
-    MockedClient.mockImplementationOnce(() => mockClient as unknown as Client)
-      .mockImplementationOnce(() => failingClient as unknown as Client);
+    MockedClient.mockImplementationOnce(function() {
+      return mockClient as unknown as Client;
+    }).mockImplementationOnce(function() {
+      return failingClient as unknown as Client;
+    });
 
     await clientManager.connectToServers([mockServerConfig, server2Config]);
 
@@ -567,7 +610,9 @@ describe("ClientManager", () => {
         onerror: vi.fn(),
       };
 
-      MockedClient.mockImplementation(() => mockClientWithQuery as unknown as Client);
+      MockedClient.mockImplementation(function() {
+        return mockClientWithQuery as unknown as Client;
+      });
 
       const serverWithQuery = {
         id: "query-server",
