@@ -45,15 +45,19 @@ const authConfig = getAuthConfig();
 app.use(authMiddleware(authConfig));
 
 // Create MCP server instance
-const server = new McpServer({
-  name: config.routerName || "mcp-router",
-  version: config.routerVersion || "1.0.0",
-  capabilities: {
-    tools: {
-      listChanged: true,
+const server = new McpServer(
+  {
+    name: config.routerName || "mcp-router",
+    version: config.routerVersion || "1.0.0",
+  },
+  {
+    capabilities: {
+      tools: {
+        listChanged: true,
+      },
     },
   },
-});
+);
 
 // Initialize database and persistence services (async setup in main())
 let database: ReturnType<typeof initDatabaseFromEnv> | null = null;
@@ -80,11 +84,12 @@ const stats: RouterStats = {
 // We'll register tools dynamically after connecting to servers
 
 // Add router management tools
-server.tool(
+server.registerTool(
   "router:list-servers",
-  "List all configured MCP servers and their status",
-  {},
-  async () => {
+  {
+    description: "List all configured MCP servers and their status",
+  },
+  async (_args: Record<string, unknown>, _extra: unknown) => {
     try {
       const serverStatuses = clientManager.getServerStatuses();
       const routerStats = clientManager.getStats();
@@ -92,7 +97,7 @@ server.tool(
       return {
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: JSON.stringify({
               summary: {
                 totalServers: routerStats.totalServers,
@@ -108,7 +113,7 @@ server.tool(
       return {
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: `Error listing servers: ${error instanceof Error ? error.message : "Unknown error"}`,
           },
         ],
@@ -118,11 +123,12 @@ server.tool(
   },
 );
 
-server.tool(
+server.registerTool(
   "router:list-tools",
-  "List all available tools from connected MCP servers",
-  {},
-  async () => {
+  {
+    description: "List all available tools from connected MCP servers",
+  },
+  async (_args: Record<string, unknown>, _extra: unknown) => {
     try {
       const tools = clientManager.getAllTools();
       const routerStats = clientManager.getStats();
@@ -130,7 +136,7 @@ server.tool(
       return {
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: JSON.stringify({
               summary: {
                 totalServers: routerStats.totalServers,
@@ -150,7 +156,7 @@ server.tool(
       return {
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: `Error listing tools: ${error instanceof Error ? error.message : "Unknown error"}`,
           },
         ],
@@ -169,12 +175,13 @@ const registerServerSchema = z.object({
   autoReconnect: z.boolean().optional().default(true).describe("Whether to auto-reconnect on ping failures"),
 });
 
-// @ts-ignore TypeScript has issues with deep type instantiation in MCP SDK with Zod
-server.tool(
+server.registerTool(
   "router:register-server",
-  "Register a new MCP server with the router",
-  registerServerSchema.shape as Record<string, z.ZodTypeAny>,
-  async args => {
+  {
+    description: "Register a new MCP server with the router",
+    inputSchema: registerServerSchema.shape,
+  },
+  async (args: Record<string, unknown>, _extra: unknown) => {
     const typedArgs = args as { name: string; url: string; description?: string; enabled?: boolean; autoReconnect?: boolean };
     const serverConfig: McpServerConfig = {
       id: "",
@@ -191,7 +198,7 @@ server.tool(
       return {
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: JSON.stringify({
               success: result.success,
               message: result.message,
@@ -205,7 +212,7 @@ server.tool(
       return {
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: `${result.message}: ${result.error}`,
           },
         ],
@@ -219,12 +226,13 @@ const unregisterServerSchema = z.object({
   serverName: z.string().describe("Name of the server to unregister"),
 });
 
-// @ts-ignore TypeScript has issues with deep type instantiation in MCP SDK with Zod
-server.tool(
+server.registerTool(
   "router:unregister-server",
-  "Unregister an MCP server from the router",
-  unregisterServerSchema.shape as Record<string, z.ZodTypeAny>,
-  async args => {
+  {
+    description: "Unregister an MCP server from the router",
+    inputSchema: unregisterServerSchema.shape,
+  },
+  async (args: Record<string, unknown>, _extra: unknown) => {
     const typedArgs = args as { serverName: string };
     const result = await unregisterServer(typedArgs.serverName, clientManager, config, stats, syncService);
 
@@ -232,7 +240,7 @@ server.tool(
       return {
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: JSON.stringify({
               success: result.success,
               message: result.message,
@@ -245,7 +253,7 @@ server.tool(
       return {
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: result.message,
           },
         ],
@@ -260,12 +268,13 @@ const reconnectServerSchema = z.object({
   serverName: z.string().describe("Name of the server to reconnect"),
 });
 
-// @ts-ignore TypeScript has issues with deep type instantiation in MCP SDK with Zod
-server.tool(
+server.registerTool(
   "router:reconnect-server",
-  "Reconnect to a specific MCP server",
-  reconnectServerSchema.shape as Record<string, z.ZodTypeAny>,
-  async args => {
+  {
+    description: "Reconnect to a specific MCP server",
+    inputSchema: reconnectServerSchema.shape,
+  },
+  async (args: Record<string, unknown>, _extra: unknown) => {
     const typedArgs = args as { serverName: string };
 
     try {
@@ -280,7 +289,7 @@ server.tool(
       return {
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: JSON.stringify({
               success: true,
               message: `Successfully reconnected to server: ${typedArgs.serverName}`,
@@ -299,7 +308,7 @@ server.tool(
       return {
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: `Error reconnecting to server ${typedArgs.serverName}: ${error instanceof Error ? error.message : "Unknown error"}`,
           },
         ],
