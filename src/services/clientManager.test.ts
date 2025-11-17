@@ -552,34 +552,34 @@ describe("ClientManager", () => {
       expect(hasTool).toBe(false);
     });
 
-    test("should correctly identify quote tool when present", async () => {
-      // Create a mock server with quote tool
-      const mockToolsWithQuote = [
+    test("should correctly identify query tool when present", async () => {
+      // Create a mock server with query tool
+      const mockToolsWithQuery = [
         { name: "add", description: "Add two numbers" },
-        { name: "quote", description: "Get quote for tool usage" },
+        { name: "query", description: "Query data from database" },
       ];
 
-      const mockClientWithQuote = {
+      const mockClientWithQuery = {
         connect: vi.fn(),
         close: vi.fn(),
-        listTools: vi.fn().mockResolvedValue({ tools: mockToolsWithQuote }),
+        listTools: vi.fn().mockResolvedValue({ tools: mockToolsWithQuery }),
         callTool: vi.fn(),
         onerror: vi.fn(),
       };
 
-      MockedClient.mockImplementation(() => mockClientWithQuote as unknown as Client);
+      MockedClient.mockImplementation(() => mockClientWithQuery as unknown as Client);
 
-      const serverWithQuote = {
-        id: "quote-server",
-        name: "quote-server",
+      const serverWithQuery = {
+        id: "query-server",
+        name: "query-server",
         url: "http://localhost:3002/mcp",
         enabled: true,
       };
 
-      await clientManager.connectToServer(serverWithQuote);
+      await clientManager.connectToServer(serverWithQuery);
 
-      const hasQuote = clientManager.hasServerTool("quote-server", "quote");
-      expect(hasQuote).toBe(true);
+      const hasQuery = clientManager.hasServerTool("query-server", "query");
+      expect(hasQuery).toBe(true);
     });
   });
 
@@ -673,6 +673,92 @@ describe("ClientManager", () => {
 
       expect(serversWithStats).not.toContain("test-server");
       expect(serversWithStats).toHaveLength(0);
+    });
+  });
+
+  describe("quote tool filtering", () => {
+    test("should filter out quote tools when loading server tools", async () => {
+      const mockToolsWithQuote = [
+        {
+          name: "quote",
+          description: "Get quote for tool usage",
+          inputSchema: { type: "object", properties: {} },
+        },
+        {
+          name: "useful-tool",
+          description: "A useful tool",
+          inputSchema: { type: "object", properties: {} },
+        },
+        {
+          name: "another-tool",
+          description: "Another tool",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ];
+
+      mockClient.listTools.mockResolvedValue({ tools: mockToolsWithQuote });
+
+      await clientManager.connectToServer(mockServerConfig);
+
+      const allTools = clientManager.getAllTools();
+
+      expect(allTools).toHaveLength(2); // Only 2 tools, quote is filtered out
+      expect(allTools.map(t => t.name)).toEqual(["test-server:useful-tool", "test-server:another-tool"]);
+      expect(allTools.map(t => t.name)).not.toContain("test-server:quote");
+    });
+
+    test("should not expose quote tool via hasServerTool", async () => {
+      const mockToolsWithQuote = [
+        {
+          name: "quote",
+          description: "Get quote for tool usage",
+          inputSchema: { type: "object", properties: {} },
+        },
+        {
+          name: "other-tool",
+          description: "Other tool",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ];
+
+      mockClient.listTools.mockResolvedValue({ tools: mockToolsWithQuote });
+
+      await clientManager.connectToServer(mockServerConfig);
+
+      const hasQuote = clientManager.hasServerTool("test-server", "quote");
+
+      expect(hasQuote).toBe(false); // quote is filtered out, so should not be found
+    });
+
+    test("should filter out both stats and quote tools", async () => {
+      const mockToolsWithBoth = [
+        {
+          name: "stats",
+          description: "Get server statistics",
+          inputSchema: { type: "object", properties: {} },
+        },
+        {
+          name: "quote",
+          description: "Get quote for tool usage",
+          inputSchema: { type: "object", properties: {} },
+        },
+        {
+          name: "regular-tool",
+          description: "A regular tool",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ];
+
+      mockClient.listTools.mockResolvedValue({ tools: mockToolsWithBoth });
+
+      await clientManager.connectToServer(mockServerConfig);
+
+      const allTools = clientManager.getAllTools();
+
+      expect(allTools).toHaveLength(1); // Only 1 tool, both stats and quote are filtered out
+      expect(allTools.map(t => t.name)).toEqual(["test-server:regular-tool"]);
+      expect(allTools.map(t => t.name)).not.toContain("test-server:stats");
+      expect(allTools.map(t => t.name)).not.toContain("test-server:quote");
     });
   });
 });

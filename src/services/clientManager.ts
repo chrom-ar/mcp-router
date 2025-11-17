@@ -189,8 +189,8 @@ export class ClientManager {
 
       if (toolsResult && toolsResult.tools) {
         const aggregatedTools: AggregatedTool[] = toolsResult.tools
-          // Filter out stats tools - they will be accessed via router:stats
-          .filter((tool: { name: string; description?: string; inputSchema: unknown }) => tool.name !== "stats")
+          // Filter out internal tools - stats (accessed via router:stats) and quote (used by credit manager)
+          .filter((tool: { name: string; description?: string; inputSchema: unknown }) => tool.name !== "stats" && tool.name !== "quote")
           .map((tool: { name: string; description?: string; inputSchema: unknown }) => {
             const aggregatedName = `${serverId}${this.toolNameSeparator}${tool.name}`;
             const schema: ZodRawShape = {};
