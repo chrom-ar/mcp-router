@@ -570,6 +570,82 @@ describe("CreditManager", () => {
           expect(trackBody.outputTokens).toBe(60);
         });
       });
+
+      it("should extract actual metrics from response using camelCase modelsMetrics", async () => {
+        await runWithContext({
+          apiKey: "test_api_key",
+          userId: "user-123",
+          userEmail: "test@example.com",
+        }, async () => {
+          // Mock getQuote
+          mockCallTool.mockImplementation(toolName => {
+            if (toolName.includes(":quote")) {
+              return Promise.resolve({
+                content: [{
+                  text: JSON.stringify({
+                    success: true,
+                    estimated_cost: {
+                      model_id: "test-model",
+                      input_tokens: 100,
+                      output_tokens: 50,
+                    },
+                  }),
+                }],
+              });
+            }
+
+            return Promise.resolve({
+              content: [{
+                text: JSON.stringify({
+                  result: "success",
+                  modelsMetrics: {
+                    "actual-model": {
+                      input_tokens: 130,
+                      output_tokens: 70,
+                    },
+                  },
+                }),
+              }],
+            });
+          });
+
+          (global.fetch as jest.Mock).mockImplementation((url: string) => {
+            if (url.includes("/usage/quota")) {
+              return Promise.resolve({
+                ok: true,
+                json: async () => ({
+                  allowed: true,
+                  remainingDaily: 1000,
+                  remainingMonthly: 50000,
+                }),
+              });
+            }
+
+            if (url.includes("/usage/track")) {
+              return Promise.resolve({
+                ok: true,
+                json: async () => ({ tracked: true }),
+              });
+            }
+          });
+
+          const result = await creditManager.executeWithCreditCheck(
+            "test-server",
+            "test-tool",
+            { arg: "value" },
+            mockCallTool,
+            true, // hasQuoteTool
+          );
+
+          const trackCall = (global.fetch as jest.Mock).mock.calls.find((call: [string, RequestInit]) =>
+            call[0].includes("/usage/track"),
+          );
+          const trackBody = JSON.parse(trackCall[1].body);
+
+          expect(trackBody.inputTokens).toBe(130);
+          expect(trackBody.outputTokens).toBe(70);
+        });
+      });
     });
   });
 });

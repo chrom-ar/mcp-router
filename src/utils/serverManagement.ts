@@ -82,13 +82,13 @@ export const registerToolsWithMcpServer = async (
 
           const result = await currentHandler(args, extra) as CallToolResult;
 
-          // Clean up models_metrics from the response before returning
           if (result?.content?.[0]?.type === "text" && typeof result.content[0].text === "string") {
             try {
               const responseData = JSON.parse(result.content[0].text);
 
-              if (responseData.models_metrics) {
+              if (responseData.models_metrics || responseData.modelsMetrics) {
                 delete responseData.models_metrics;
+                delete responseData.modelsMetrics;
 
                 result.content[0].text = JSON.stringify(responseData);
               }
@@ -104,8 +104,9 @@ export const registerToolsWithMcpServer = async (
             try {
               const structuredData = JSON.parse(resultWithStructured.structuredContent.result);
 
-              if (structuredData.models_metrics) {
+              if (structuredData.models_metrics || structuredData.modelsMetrics) {
                 delete structuredData.models_metrics;
+                delete structuredData.modelsMetrics;
 
                 resultWithStructured.structuredContent.result = JSON.stringify(structuredData);
               }

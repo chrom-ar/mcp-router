@@ -386,12 +386,13 @@ export class CreditManager {
 
       if (content?.[0]?.text) {
         const responseData = JSON.parse(content[0].text);
+        const metricsData = responseData.models_metrics || responseData.modelsMetrics;
 
-        if (responseData.models_metrics) {
+        if (metricsData) {
           actualInputTokens = 0;
           actualOutputTokens = 0;
 
-          for (const [modelId, metrics] of Object.entries(responseData.models_metrics)) {
+          for (const [modelId, metrics] of Object.entries(metricsData)) {
             const modelMetrics = metrics as { input_tokens?: number; output_tokens?: number };
 
             actualInputTokens += modelMetrics.input_tokens || 0;
