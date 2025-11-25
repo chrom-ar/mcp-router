@@ -85,7 +85,7 @@ const stats: RouterStats = {
 
 // Add router management tools
 server.registerTool(
-  "router:list-servers",
+  `router${config.toolNameSeparator}list-servers`,
   {
     description: "List all configured MCP servers and their status",
   },
@@ -124,7 +124,7 @@ server.registerTool(
 );
 
 server.registerTool(
-  "router:list-tools",
+  `router${config.toolNameSeparator}list-tools`,
   {
     description: "List all available tools from connected MCP servers",
   },
@@ -176,7 +176,7 @@ const registerServerSchema = z.object({
 });
 
 server.registerTool(
-  "router:register-server",
+  `router${config.toolNameSeparator}register-server`,
   {
     description: "Register a new MCP server with the router",
     inputSchema: registerServerSchema.shape,
@@ -227,7 +227,7 @@ const unregisterServerSchema = z.object({
 });
 
 server.registerTool(
-  "router:unregister-server",
+  `router${config.toolNameSeparator}unregister-server`,
   {
     description: "Unregister an MCP server from the router",
     inputSchema: unregisterServerSchema.shape,
@@ -269,7 +269,7 @@ const reconnectServerSchema = z.object({
 });
 
 server.registerTool(
-  "router:reconnect-server",
+  `router${config.toolNameSeparator}reconnect-server`,
   {
     description: "Reconnect to a specific MCP server",
     inputSchema: reconnectServerSchema.shape,
