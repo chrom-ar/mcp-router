@@ -642,7 +642,7 @@ const main = async () => {
           enabled: process.env.ENABLE_AUDIT_LOG === "true",
         });
 
-        const newClientManager = new ClientManager(config.toolNameSeparator || ":", {
+        const newClientManager = new ClientManager(config.toolNameSeparator || "-->", {
           serverRepository,
           eventLogger,
           auditLogger,
