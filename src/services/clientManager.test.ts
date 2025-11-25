@@ -73,16 +73,16 @@ describe("ClientManager", () => {
       close: vi.fn().mockResolvedValue(undefined),
     };
 
-    MockedClient.mockImplementation(function() {
+    MockedClient.mockImplementation(function () {
       return mockClient as unknown as Client;
     });
-    MockedTransport.mockImplementation(function() {
+    MockedTransport.mockImplementation(function () {
       return mockTransport as unknown as StreamableHTTPClientTransport;
     });
 
-    clientManager = new ClientManager(":");
+    clientManager = new ClientManager("-->");
 
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => { });
   });
 
   afterEach(() => {
@@ -142,10 +142,10 @@ describe("ClientManager", () => {
 
     expect(allTools).toHaveLength(2);
 
-    expect(allTools[0].name).toBe("test-server:test-tool-1");
+    expect(allTools[0].name).toBe("test-server-->test-tool-1");
     expect(allTools[0].description).toContain("Test tool 1");
 
-    expect(allTools[1].name).toBe("test-server:test-tool-2");
+    expect(allTools[1].name).toBe("test-server-->test-tool-2");
     expect(allTools[1].description).toContain("Test tool 2");
   });
 
@@ -161,7 +161,7 @@ describe("ClientManager", () => {
   test("should call tools on the correct server", async () => {
     await clientManager.connectToServers([mockServerConfig]);
 
-    const result = await clientManager.callTool("test-server:test-tool-1", { param1: "value" });
+    const result = await clientManager.callTool("test-server-->test-tool-1", { param1: "value" });
 
     expect(mockClient.callTool).toHaveBeenCalledWith({
       name: "test-tool-1",
@@ -173,7 +173,7 @@ describe("ClientManager", () => {
   test("should throw error for unknown tool", async () => {
     await clientManager.connectToServers([mockServerConfig]);
 
-    await expect(clientManager.callTool("unknown:tool", {}))
+    await expect(clientManager.callTool("unknown-->tool", {}))
       .rejects.toThrow("Server unknown not found");
   });
 
@@ -189,7 +189,7 @@ describe("ClientManager", () => {
 
     mockClient.connect.mockRejectedValueOnce(new Error("Connection failed"));
 
-    await expect(clientManager.callTool("test-server:test-tool-1", {}))
+    await expect(clientManager.callTool("test-server-->test-tool-1", {}))
       .rejects.toThrow("Server test-server is not connected");
   });
 
@@ -240,9 +240,9 @@ describe("ClientManager", () => {
       onerror: null,
     };
 
-    MockedClient.mockImplementationOnce(function() {
+    MockedClient.mockImplementationOnce(function () {
       return mockClient as unknown as Client;
-    }).mockImplementationOnce(function() {
+    }).mockImplementationOnce(function () {
       return mockClient2 as unknown as Client;
     });
 
@@ -258,14 +258,14 @@ describe("ClientManager", () => {
     expect(stats.connectedServers).toBe(2);
     expect(stats.totalTools).toBe(3);
 
-    await clientManager.callTool("test-server:test-tool-1", {});
+    await clientManager.callTool("test-server-->test-tool-1", {});
 
     expect(mockClient.callTool).toHaveBeenCalledWith({
       name: "test-tool-1",
       arguments: {},
     });
 
-    await clientManager.callTool("test-server-2:tool-a", {});
+    await clientManager.callTool("test-server-2-->tool-a", {});
 
     expect(mockClient2.callTool).toHaveBeenCalledWith({
       name: "tool-a",
@@ -288,10 +288,10 @@ describe("ClientManager", () => {
       close: vi.fn().mockResolvedValue(undefined),
     };
 
-    MockedClient.mockImplementationOnce(function() {
+    MockedClient.mockImplementationOnce(function () {
       return newMockClient as unknown as Client;
     });
-    MockedTransport.mockImplementationOnce(function() {
+    MockedTransport.mockImplementationOnce(function () {
       return newMockTransport as unknown as StreamableHTTPClientTransport;
     });
 
@@ -301,7 +301,7 @@ describe("ClientManager", () => {
     expect(newMockClient.connect).toHaveBeenCalled();
 
     // Old routes should be cleared and new ones created
-    await clientManager.callTool("test-server:test-tool-1", {});
+    await clientManager.callTool("test-server-->test-tool-1", {});
 
     expect(newMockClient.callTool).toHaveBeenCalled();
   });
@@ -339,9 +339,9 @@ describe("ClientManager", () => {
       close: vi.fn().mockResolvedValue(undefined),
     };
 
-    MockedTransport.mockImplementationOnce(function() {
+    MockedTransport.mockImplementationOnce(function () {
       return mockTransport as unknown as StreamableHTTPClientTransport;
-    }).mockImplementationOnce(function() {
+    }).mockImplementationOnce(function () {
       return mockTransport2 as unknown as StreamableHTTPClientTransport;
     });
 
@@ -412,7 +412,7 @@ describe("ClientManager", () => {
   test("should start ping interval when connecting to servers", async () => {
     vi.useFakeTimers();
 
-    const manager = new ClientManager(":", {
+    const manager = new ClientManager("-->", {
       pingIntervalMs: 1000,
       maxConsecutivePingFailures: 2,
     });
@@ -432,7 +432,7 @@ describe("ClientManager", () => {
   test("should mark server as disconnected after max ping failures", async () => {
     vi.useFakeTimers();
 
-    const manager = new ClientManager(":", {
+    const manager = new ClientManager("-->", {
       pingIntervalMs: 1000,
       maxConsecutivePingFailures: 2,
     });
@@ -460,7 +460,7 @@ describe("ClientManager", () => {
   test("should stop ping interval on disconnect all", async () => {
     vi.useFakeTimers();
 
-    const manager = new ClientManager(":", {
+    const manager = new ClientManager("-->", {
       pingIntervalMs: 1000,
     });
 
@@ -501,10 +501,10 @@ describe("ClientManager", () => {
       close: vi.fn().mockResolvedValue(undefined),
     };
 
-    MockedClient.mockImplementationOnce(function() {
+    MockedClient.mockImplementationOnce(function () {
       return secondMockClient as unknown as Client;
     });
-    MockedTransport.mockImplementationOnce(function() {
+    MockedTransport.mockImplementationOnce(function () {
       return secondMockTransport as unknown as StreamableHTTPClientTransport;
     });
 
@@ -519,7 +519,7 @@ describe("ClientManager", () => {
     // Tools should use the same prefixed names
     const tools = clientManager.getAllTools();
 
-    expect(tools[0].name).toBe("test-server:test-tool-1");
+    expect(tools[0].name).toBe("test-server-->test-tool-1");
   });
 
   test("should only return tools from connected servers", async () => {
@@ -535,9 +535,9 @@ describe("ClientManager", () => {
       connect: vi.fn().mockRejectedValue(new Error("Connection failed")),
     };
 
-    MockedClient.mockImplementationOnce(function() {
+    MockedClient.mockImplementationOnce(function () {
       return mockClient as unknown as Client;
-    }).mockImplementationOnce(function() {
+    }).mockImplementationOnce(function () {
       return failingClient as unknown as Client;
     });
 
@@ -610,7 +610,7 @@ describe("ClientManager", () => {
         onerror: vi.fn(),
       };
 
-      MockedClient.mockImplementation(function() {
+      MockedClient.mockImplementation(function () {
         return mockClientWithQuery as unknown as Client;
       });
 
@@ -655,8 +655,8 @@ describe("ClientManager", () => {
       const allTools = clientManager.getAllTools();
 
       expect(allTools).toHaveLength(2); // Only 2 tools, stats is filtered out
-      expect(allTools.map(t => t.name)).toEqual(["test-server:useful-tool", "test-server:another-tool"]);
-      expect(allTools.map(t => t.name)).not.toContain("test-server:stats");
+      expect(allTools.map(t => t.name)).toEqual(["test-server-->useful-tool", "test-server-->another-tool"]);
+      expect(allTools.map(t => t.name)).not.toContain("test-server-->stats");
     });
 
     test("should still be able to call stats tool via getServersWithStatsTool and callServerStatsTool", async () => {
@@ -748,8 +748,8 @@ describe("ClientManager", () => {
       const allTools = clientManager.getAllTools();
 
       expect(allTools).toHaveLength(2); // Only 2 tools, quote is filtered out
-      expect(allTools.map(t => t.name)).toEqual(["test-server:useful-tool", "test-server:another-tool"]);
-      expect(allTools.map(t => t.name)).not.toContain("test-server:quote");
+      expect(allTools.map(t => t.name)).toEqual(["test-server-->useful-tool", "test-server-->another-tool"]);
+      expect(allTools.map(t => t.name)).not.toContain("test-server-->quote");
     });
 
     test("should not expose quote tool via hasServerTool", async () => {
@@ -801,9 +801,9 @@ describe("ClientManager", () => {
       const allTools = clientManager.getAllTools();
 
       expect(allTools).toHaveLength(1); // Only 1 tool, both stats and quote are filtered out
-      expect(allTools.map(t => t.name)).toEqual(["test-server:regular-tool"]);
-      expect(allTools.map(t => t.name)).not.toContain("test-server:stats");
-      expect(allTools.map(t => t.name)).not.toContain("test-server:quote");
+      expect(allTools.map(t => t.name)).toEqual(["test-server-->regular-tool"]);
+      expect(allTools.map(t => t.name)).not.toContain("test-server-->stats");
+      expect(allTools.map(t => t.name)).not.toContain("test-server-->quote");
     });
   });
 });

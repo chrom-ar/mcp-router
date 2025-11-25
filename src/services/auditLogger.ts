@@ -153,7 +153,7 @@ export class AuditLogger {
               audit.errorMessage || null,
               audit.userId || null,
               audit.userEmail || null,
-              audit.apiKey || null,
+              audit.apiKey ? audit.apiKey.substring(0, 20) : null,
             ],
           );
         }

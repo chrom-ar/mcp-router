@@ -40,7 +40,7 @@ export class ClientManager {
   private maxConsecutivePingFailures: number;
 
   constructor(
-    toolNameSeparator: string = ":",
+    toolNameSeparator: string = "-->",
     options?: {
       serverRepository?: ServerRepository;
       eventLogger?: EventLogger;

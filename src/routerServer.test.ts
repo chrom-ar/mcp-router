@@ -34,7 +34,7 @@ describe.skipIf(process.env.CI)("MCP Router Server", () => {
       ROUTER_PORT: "4001", // Use port 4001 for testing
       ROUTER_NAME: "mcp-router-test",
       ROUTER_VERSION: "1.0.0-test",
-      TOOL_NAME_SEPARATOR: ":",
+      TOOL_NAME_SEPARATOR: "-->",
       // Explicitly disable all features that could cause issues
       AUTH_ENABLED: "false", // Disable authentication for tests
       DATABASE_URL: "", // Empty string to ensure no DB connection
@@ -82,7 +82,7 @@ describe.skipIf(process.env.CI)("MCP Router Server", () => {
 
       // Also periodically check the health endpoint as a fallback
       const checkHealth = async () => {
-        if (routerStarted) {return;}
+        if (routerStarted) { return; }
 
         try {
           const response = await fetch(`${routerUrl}/health`);
@@ -200,7 +200,7 @@ describe.skipIf(process.env.CI)("MCP Router Server", () => {
     // where we can mock servers with stats tools.
 
     const toolsResult = await client.callTool({
-      name: "router:list-tools",
+      name: "router-->list-tools",
       arguments: {},
     });
 
@@ -239,18 +239,18 @@ describe.skipIf(process.env.CI)("MCP Router Server", () => {
     const toolNames = tools.tools?.map((tool: { name: string }) => tool.name) || [];
 
     // Check for router management tools
-    expect(toolNames).toContain("router:list-servers");
-    expect(toolNames).toContain("router:reconnect-server");
+    expect(toolNames).toContain("router-->list-servers");
+    expect(toolNames).toContain("router-->reconnect-server");
 
     // Verify tool descriptions
-    const listServersTool = tools.tools?.find((tool: { name: string; description?: string }) => tool.name === "router:list-servers");
+    const listServersTool = tools.tools?.find((tool: { name: string; description?: string }) => tool.name === "router-->list-servers");
 
     expect(listServersTool?.description).toBe("List all configured MCP servers and their status");
   });
 
   test("should list servers successfully", async () => {
     const result = await client.callTool({
-      name: "router:list-servers",
+      name: "router-->list-servers",
       arguments: {},
     });
 
@@ -279,7 +279,7 @@ describe.skipIf(process.env.CI)("MCP Router Server", () => {
 
   test("should handle reconnect-server tool with invalid server", async () => {
     const result = await client.callTool({
-      name: "router:reconnect-server",
+      name: "router-->reconnect-server",
       arguments: {
         serverName: "nonexistent-server",
       },
@@ -301,7 +301,7 @@ describe.skipIf(process.env.CI)("MCP Router Server", () => {
   test("should handle invalid tool calls gracefully", async () => {
     try {
       await client.callTool({
-        name: "nonexistent:tool",
+        name: "nonexistent-->tool",
         arguments: {},
       });
 
@@ -344,14 +344,14 @@ describe.skipIf(process.env.CI)("MCP Router Server", () => {
     const toolNames = tools.tools?.map((tool: { name: string }) => tool.name) || [];
 
     // Check if there are any aggregated tools (with separator)
-    const aggregatedTools = toolNames.filter(name => name.includes(":") && !name.startsWith("router:"));
+    const aggregatedTools = toolNames.filter(name => name.includes("-->") && !name.startsWith("router-->"));
 
     if (aggregatedTools.length > 0) {
       console.log(`Found ${aggregatedTools.length} aggregated tools from backend servers`);
 
       // Verify tool naming convention
       aggregatedTools.forEach(toolName => {
-        expect(toolName).toMatch(/^[^:]+:.+$/); // Should match "server:toolname" pattern
+        expect(toolName).toMatch(/^[^:]+-->.+$/); // Should match "server-->toolname" pattern
       });
     } else {
       console.log("No backend servers connected - only router management tools available");
@@ -360,8 +360,8 @@ describe.skipIf(process.env.CI)("MCP Router Server", () => {
 
   test("should maintain consistent server state across calls", async () => {
     const results = await Promise.all([
-      client.callTool({ name: "router:list-servers", arguments: {} }),
-      client.callTool({ name: "router:list-servers", arguments: {} }),
+      client.callTool({ name: "router-->list-servers", arguments: {} }),
+      client.callTool({ name: "router-->list-servers", arguments: {} }),
     ]);
 
     expect(results.length).toBe(2);

@@ -31,7 +31,7 @@ const config: RouterConfig = {
   port: parseInt(process.env.ROUTER_PORT || "4000"),
   routerName: process.env.ROUTER_NAME || "mcp-router",
   routerVersion: process.env.ROUTER_VERSION || "1.0.0",
-  toolNameSeparator: process.env.TOOL_NAME_SEPARATOR || ":",
+  toolNameSeparator: process.env.TOOL_NAME_SEPARATOR || "-->",
 };
 
 // Create Express app

@@ -17,7 +17,7 @@ describe("Dynamic Tool Management", () => {
       version: "1.0.0",
     });
 
-    clientManager = new ClientManager(":");
+    clientManager = new ClientManager("-->");
 
     unregisterToolsFromMcpServer("test-server");
   });
@@ -41,7 +41,7 @@ describe("Dynamic Tool Management", () => {
 
     vi.spyOn(clientManager, "buildServerTools").mockResolvedValue([
       {
-        name: "test-server:my-tool",
+        name: "test-server-->my-tool",
         description: "A test tool",
         inputSchema: {
           type: "object",
@@ -61,8 +61,8 @@ describe("Dynamic Tool Management", () => {
     // We can access it via the server property for testing
     const registeredTools = (server as unknown as { _registeredTools: Record<string, { enabled: boolean }> })._registeredTools;
 
-    expect(registeredTools["test-server:my-tool"]).toBeDefined();
-    expect(registeredTools["test-server:my-tool"].enabled).toBe(true);
+    expect(registeredTools["test-server-->my-tool"]).toBeDefined();
+    expect(registeredTools["test-server-->my-tool"].enabled).toBe(true);
   });
 
   it("should update tool handler dynamically when re-registered with same schema", async () => {
@@ -85,7 +85,7 @@ describe("Dynamic Tool Management", () => {
 
     vi.spyOn(clientManager, "buildServerTools").mockResolvedValue([
       {
-        name: "test-server:my-tool",
+        name: "test-server-->my-tool",
         description: "A test tool",
         inputSchema,
         handler: mockHandlerV1,
@@ -97,9 +97,9 @@ describe("Dynamic Tool Management", () => {
 
     let registeredTools = (server as unknown as { _registeredTools: Record<string, { enabled: boolean }> })._registeredTools;
 
-    expect(registeredTools["test-server:my-tool"]).toBeDefined();
+    expect(registeredTools["test-server-->my-tool"]).toBeDefined();
 
-    registeredTools["test-server:my-tool"];
+    registeredTools["test-server-->my-tool"];
 
     const mockHandlerV2 = vi.fn().mockResolvedValue({
       content: [{ type: "text", text: "result-v2" }],
@@ -107,7 +107,7 @@ describe("Dynamic Tool Management", () => {
 
     vi.spyOn(clientManager, "buildServerTools").mockResolvedValue([
       {
-        name: "test-server:my-tool",
+        name: "test-server-->my-tool",
         description: "A test tool",
         inputSchema, // Same schema
         handler: mockHandlerV2, // Different handler
@@ -123,8 +123,8 @@ describe("Dynamic Tool Management", () => {
     // The key point: the handler map was updated, so calls will use the new handler
     registeredTools = (server as unknown as { _registeredTools: Record<string, { enabled: boolean }> })._registeredTools;
 
-    expect(registeredTools["test-server:my-tool"]).toBeDefined();
-    expect(registeredTools["test-server:my-tool"].enabled).toBe(true);
+    expect(registeredTools["test-server-->my-tool"]).toBeDefined();
+    expect(registeredTools["test-server-->my-tool"].enabled).toBe(true);
   });
 
   it("should re-register tool when schema changes", async () => {
@@ -140,7 +140,7 @@ describe("Dynamic Tool Management", () => {
 
     vi.spyOn(clientManager, "buildServerTools").mockResolvedValue([
       {
-        name: "test-server:my-tool",
+        name: "test-server-->my-tool",
         description: "A test tool",
         inputSchema: {
           type: "object",
@@ -161,7 +161,7 @@ describe("Dynamic Tool Management", () => {
 
     vi.spyOn(clientManager, "buildServerTools").mockResolvedValue([
       {
-        name: "test-server:my-tool",
+        name: "test-server-->my-tool",
         description: "A test tool",
         inputSchema: {
           type: "object",
@@ -179,10 +179,10 @@ describe("Dynamic Tool Management", () => {
 
     const registeredTools = (server as unknown as { _registeredTools: Record<string, { enabled: boolean; inputSchema: unknown }> })._registeredTools;
 
-    expect(registeredTools["test-server:my-tool"]).toBeDefined();
-    expect(registeredTools["test-server:my-tool"].enabled).toBe(true);
+    expect(registeredTools["test-server-->my-tool"]).toBeDefined();
+    expect(registeredTools["test-server-->my-tool"].enabled).toBe(true);
 
-    const updatedTool = registeredTools["test-server:my-tool"];
+    const updatedTool = registeredTools["test-server-->my-tool"];
 
     expect(updatedTool.inputSchema).toBeDefined();
   });
@@ -196,14 +196,14 @@ describe("Dynamic Tool Management", () => {
 
     vi.spyOn(clientManager, "buildServerTools").mockResolvedValue([
       {
-        name: "test-server:tool1",
+        name: "test-server-->tool1",
         description: "Tool 1",
         inputSchema: { type: "object", properties: {} },
         handler: vi.fn().mockResolvedValue({ content: [] }),
         schema: z.object({}).shape,
       },
       {
-        name: "test-server:tool2",
+        name: "test-server-->tool2",
         description: "Tool 2",
         inputSchema: { type: "object", properties: {} },
         handler: vi.fn().mockResolvedValue({ content: [] }),
@@ -215,19 +215,19 @@ describe("Dynamic Tool Management", () => {
 
     let registeredTools = (server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools;
 
-    expect(registeredTools["test-server:tool1"]).toBeDefined();
-    expect(registeredTools["test-server:tool2"]).toBeDefined();
+    expect(registeredTools["test-server-->tool1"]).toBeDefined();
+    expect(registeredTools["test-server-->tool2"]).toBeDefined();
 
     const removedTools = unregisterToolsFromMcpServer("test-server");
 
     expect(removedTools).toHaveLength(2);
-    expect(removedTools).toContain("test-server:tool1");
-    expect(removedTools).toContain("test-server:tool2");
+    expect(removedTools).toContain("test-server-->tool1");
+    expect(removedTools).toContain("test-server-->tool2");
 
     registeredTools = (server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools;
 
-    expect(registeredTools["test-server:tool1"]).toBeUndefined();
-    expect(registeredTools["test-server:tool2"]).toBeUndefined();
+    expect(registeredTools["test-server-->tool1"]).toBeUndefined();
+    expect(registeredTools["test-server-->tool2"]).toBeUndefined();
   });
 
   it("should handle tool removal when a tool is no longer exposed", async () => {
@@ -239,14 +239,14 @@ describe("Dynamic Tool Management", () => {
 
     vi.spyOn(clientManager, "buildServerTools").mockResolvedValue([
       {
-        name: "test-server:tool1",
+        name: "test-server-->tool1",
         description: "Tool 1",
         inputSchema: { type: "object", properties: {} },
         handler: vi.fn().mockResolvedValue({ content: [] }),
         schema: z.object({}).shape,
       },
       {
-        name: "test-server:tool2",
+        name: "test-server-->tool2",
         description: "Tool 2",
         inputSchema: { type: "object", properties: {} },
         handler: vi.fn().mockResolvedValue({ content: [] }),
@@ -258,7 +258,7 @@ describe("Dynamic Tool Management", () => {
 
     const registeredTools = (server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools;
 
-    expect(registeredTools["test-server:tool1"]).toBeDefined();
-    expect(registeredTools["test-server:tool2"]).toBeDefined();
+    expect(registeredTools["test-server-->tool1"]).toBeDefined();
+    expect(registeredTools["test-server-->tool2"]).toBeDefined();
   });
 });
