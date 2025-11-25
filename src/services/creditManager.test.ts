@@ -12,11 +12,13 @@ describe("CreditManager", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.USER_MANAGEMENT_API_KEY = mockAdminKey;
+    process.env.TOOL_NAME_SEPARATOR = "-->";
     creditManager = new CreditManager();
   });
 
   afterEach(() => {
     delete process.env.USER_MANAGEMENT_API_KEY;
+    delete process.env.TOOL_NAME_SEPARATOR;
   });
 
   describe("constructor", () => {
@@ -56,7 +58,7 @@ describe("CreditManager", () => {
         true, // hasQuoteTool
       );
 
-      expect(mockCallTool).toHaveBeenCalledWith("test-server:quote", {
+      expect(mockCallTool).toHaveBeenCalledWith("test-server-->quote", {
         tool_name: "test-tool",
         tool_args: { arg: "value" },
       });
@@ -292,7 +294,7 @@ describe("CreditManager", () => {
       );
 
       expect(result).toEqual({ success: true });
-      expect(mockCallTool).toHaveBeenCalledWith("test-server:quote", { arg: "value" });
+      expect(mockCallTool).toHaveBeenCalledWith("test-server-->quote", { arg: "value" });
     });
 
     it("should bypass credit check when no API key in context", async () => {
@@ -308,7 +310,7 @@ describe("CreditManager", () => {
       );
 
       expect(result).toEqual({ success: true });
-      expect(mockCallTool).toHaveBeenCalledWith("test-server:test-tool", { arg: "value" });
+      expect(mockCallTool).toHaveBeenCalledWith("test-server-->test-tool", { arg: "value" });
     });
 
     describe("with API key but no quote tool", () => {
@@ -320,7 +322,7 @@ describe("CreditManager", () => {
         }, async () => {
         // Mock getQuote to return null (no quote tool)
           mockCallTool.mockImplementation(toolName => {
-            if (toolName.includes(":quote")) {
+            if (toolName.includes("-->quote")) {
               return Promise.reject(new Error("Tool not found"));
             }
             return Promise.resolve({ success: true, content: [{ text: "result" }] });
@@ -352,7 +354,7 @@ describe("CreditManager", () => {
         }, async () => {
         // Mock getQuote to return null
           mockCallTool.mockImplementation(toolName => {
-            if (toolName.includes(":quote")) {
+            if (toolName.includes("-->quote")) {
               return Promise.reject(new Error("Tool not found"));
             }
             return Promise.resolve({ success: true });
@@ -385,7 +387,7 @@ describe("CreditManager", () => {
         }, async () => {
         // Mock getQuote to return a quote
           mockCallTool.mockImplementation(toolName => {
-            if (toolName.includes(":quote")) {
+            if (toolName.includes("-->quote")) {
               return Promise.resolve({
                 content: [{
                   text: JSON.stringify({
@@ -455,7 +457,7 @@ describe("CreditManager", () => {
         }, async () => {
         // Mock getQuote
           mockCallTool.mockImplementation(toolName => {
-            if (toolName.includes(":quote")) {
+            if (toolName.includes("-->quote")) {
               return Promise.resolve({
                 content: [{
                   text: JSON.stringify({
@@ -503,7 +505,7 @@ describe("CreditManager", () => {
         }, async () => {
         // Mock getQuote
           mockCallTool.mockImplementation(toolName => {
-            if (toolName.includes(":quote")) {
+            if (toolName.includes("-->quote")) {
               return Promise.resolve({
                 content: [{
                   text: JSON.stringify({
@@ -579,7 +581,7 @@ describe("CreditManager", () => {
         }, async () => {
           // Mock getQuote
           mockCallTool.mockImplementation(toolName => {
-            if (toolName.includes(":quote")) {
+            if (toolName.includes("-->quote")) {
               return Promise.resolve({
                 content: [{
                   text: JSON.stringify({
