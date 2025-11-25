@@ -33,9 +33,11 @@ interface UsageTrackResult {
 export class CreditManager {
   private userApiUrl: string;
   private adminApiKey: string;
+  private toolNameSeparator: string;
 
-  constructor() {
+  constructor(toolNameSeparator: string = "-->") {
     this.userApiUrl = process.env.USER_MANAGEMENT_API || "https://users.chrom.ar";
+    this.toolNameSeparator = process.env.TOOL_NAME_SEPARATOR || toolNameSeparator;
     const adminApiKey = process.env.USER_MANAGEMENT_API_KEY;
 
     if (!adminApiKey) {
@@ -57,9 +59,9 @@ export class CreditManager {
     }
 
     try {
-      const quoteToolName = `${serverName}:quote`;
+      const quoteToolName = `${serverName}${this.toolNameSeparator}quote`;
       const quoteArgs = {
-        tool_name: toolName.replace(`${serverName}:`, ""),
+        tool_name: toolName.replace(`${serverName}${this.toolNameSeparator}`, ""),
         tool_args: toolArgs,
       };
 
@@ -205,7 +207,7 @@ export class CreditManager {
 
     // Bypass checks for special cases (like quote tool itself)
     if (this.shouldBypassCreditCheck(toolName, context)) {
-      return await callToolFn(`${serverName}:${toolName}`, toolArgs);
+      return await callToolFn(`${serverName}${this.toolNameSeparator}${toolName}`, toolArgs);
     }
 
     // Get quote from server
@@ -286,7 +288,7 @@ export class CreditManager {
       throw new Error("Invalid API key");
     }
 
-    return await callToolFn(`${serverName}:${toolName}`, toolArgs);
+    return await callToolFn(`${serverName}${this.toolNameSeparator}${toolName}`, toolArgs);
   }
 
   private async executeWithFullCreditCheck(
@@ -309,7 +311,7 @@ export class CreditManager {
     );
 
     const startTime = Date.now();
-    const result = await callToolFn(`${serverName}:${toolName}`, toolArgs);
+    const result = await callToolFn(`${serverName}${this.toolNameSeparator}${toolName}`, toolArgs);
     const actualMetrics = this.extractActualMetrics(result, quoteInfo, serverName, toolName);
     const duration = Date.now() - startTime;
 
