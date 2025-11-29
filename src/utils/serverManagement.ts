@@ -9,6 +9,7 @@ import type { McpServerConfig, RouterConfig, RouterStats } from "../types/index.
 
 const registeredTools = new Map<string, RegisteredTool>();
 const toolHandlers = new Map<string, (args: Record<string, unknown>, extra?: unknown) => Promise<unknown>>();
+const toolSchemas = new Map<string, string>(); // Stores stringified JSON schemas for comparison
 
 export const unregisterToolsFromMcpServer = (
   serverName: string,
@@ -27,6 +28,7 @@ export const unregisterToolsFromMcpServer = (
   toolsToRemove.forEach(toolName => {
     registeredTools.delete(toolName);
     toolHandlers.delete(toolName);
+    toolSchemas.delete(toolName);
   });
 
   if (toolsToRemove.length > 0) {
@@ -51,8 +53,8 @@ export const registerToolsWithMcpServer = async (
       toolHandlers.set(tool.name, tool.handler);
 
       if (existingTool) {
-        const existingSchemaStr = JSON.stringify(existingTool.inputSchema?._def);
-        const newSchemaStr = JSON.stringify(zodShape);
+        const existingSchemaStr = toolSchemas.get(tool.name) || "";
+        const newSchemaStr = JSON.stringify(tool.inputSchema);
         const schemaChanged = existingSchemaStr !== newSchemaStr;
 
         if (schemaChanged) {
@@ -120,6 +122,7 @@ export const registerToolsWithMcpServer = async (
       );
 
       registeredTools.set(tool.name, registeredTool);
+      toolSchemas.set(tool.name, JSON.stringify(tool.inputSchema));
     }
   }
 };
