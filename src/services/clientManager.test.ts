@@ -9,12 +9,6 @@ import type { McpServerConfig } from "../types/index.js";
 vi.mock("@modelcontextprotocol/sdk/client/index.js");
 vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js");
 
-vi.mock("json-schema-to-zod", () => ({
-  jsonSchemaToZod: vi.fn(schema => {
-    return "z.object({})";
-  }),
-}));
-
 const MockedClient = Client as unknown as MockedClass<typeof Client>;
 const MockedTransport = StreamableHTTPClientTransport as unknown as MockedClass<typeof StreamableHTTPClientTransport>;
 
