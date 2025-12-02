@@ -89,7 +89,7 @@ server.registerTool(
   {
     description: "List all configured MCP servers and their status",
   },
-  async (_args: Record<string, unknown>, _extra: unknown) => {
+  async () => {
     try {
       const serverStatuses = clientManager.getServerStatuses();
       const routerStats = clientManager.getStats();
@@ -128,7 +128,7 @@ server.registerTool(
   {
     description: "List all available tools from connected MCP servers",
   },
-  async (_args: Record<string, unknown>, _extra: unknown) => {
+  async () => {
     try {
       const tools = clientManager.getAllTools();
       const routerStats = clientManager.getStats();
